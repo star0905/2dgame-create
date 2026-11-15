@@ -168,3 +168,33 @@ play_mode.player.sprite.set_facing('down')
 assert play_mode._nearest_interactable() is npc
 play_mode.finish()
 print('PASS: study furniture edges, E pickup, E safe input, facing preference')
+
+# Starting in the foyer, holding Down reaches the exit without a jewel.
+import game_framework
+import result_mode
+
+game_framework.change_mode(play_mode)
+play_mode.player.keys.add(sdl.SDLK_s)
+for _ in range(60):
+    if game_framework.current_mode is result_mode:
+        break
+    play_mode.update()
+assert game_framework.current_mode is result_mode
+assert result_mode.withdrawal_ending and not result_mode.victory
+assert '이럴 용기' in result_mode.reason
+result_mode.draw()
+
+# Retry starts a fresh game, and exiting with a jewel still wins.
+result_mode.get_events = lambda: [SimpleNamespace(type=lib.SDL_KEYDOWN, key=sdl.SDLK_r)]
+result_mode.handle_events()
+assert game_framework.current_mode is play_mode and play_mode.stage.current_room == 'foyer'
+assert play_mode.player.pickup('jewel')
+play_mode.stage.jewel_taken = True
+play_mode.player.keys.add(sdl.SDLK_s)
+for _ in range(60):
+    if game_framework.current_mode is result_mode:
+        break
+    play_mode.update()
+assert game_framework.current_mode is result_mode
+assert result_mode.victory and not result_mode.withdrawal_ending
+print('PASS: withdrawal ending, retry, and jewel exit')

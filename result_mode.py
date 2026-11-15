@@ -4,12 +4,13 @@ from ui import text
 import game_framework
 
 victory = False
+withdrawal_ending = False
 reason = ''
 
 
-def configure(won, why):
-    global victory, reason
-    victory, reason = bool(won), why
+def configure(won, why, *, abandoned=False):
+    global victory, reason, withdrawal_ending
+    victory, reason, withdrawal_ending = bool(won), why, abandoned
 
 
 def init(): pass
@@ -30,6 +31,13 @@ def handle_events():
 
 def draw():
     clear_canvas()
+    if withdrawal_ending:
+        draw_rectangle(0, 0, 959, 639, 0, 0, 0, filled=True)
+        text(157, 339, reason, 28, (241, 238, 232))
+        text(340, 80, '[R] 다시 시도    [Esc] 종료', 18, (165, 162, 158))
+        update_canvas()
+        return
+
     draw_rectangle(0, 0, 959, 639, 12, 11, 13, 255, filled=True)
     if victory:
         text(310, 426, '사건 재현 성공', 36, (130, 230, 168))

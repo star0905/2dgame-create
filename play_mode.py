@@ -63,9 +63,9 @@ def _say(value, seconds=6):
     message, msg_timer = value, seconds
 
 
-def _end(won, reason):
+def _end(won, reason, *, abandoned=False):
     import result_mode
-    result_mode.configure(won, reason)
+    result_mode.configure(won, reason, abandoned=abandoned)
     game_framework.change_mode(result_mode)
 
 
@@ -235,8 +235,9 @@ def update():
         stage.exit_attempted = False
         if player.held_item == 'jewel':
             _end(True, '보석을 확보하고 현장에서 탈출했습니다. 범인은 이후 별도의 수사로 체포되었습니다.')
-            return
-        _say('아직 보석을 확보하지 못했습니다.', 2)
+        else:
+            _end(False, '만약 범인에게 이럴 용기가 있었더라면 좋았을 텐데.', abandoned=True)
+        return
     if not stage.robbery_triggered:
         for npc in npcs:
             notice = stage.notice(npc, player)
