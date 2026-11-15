@@ -1,5 +1,5 @@
 """Room/background + small amount of stage geometry and game flags."""
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from rooms import ROOMS
 
 
@@ -12,7 +12,6 @@ class Stage:
     safe_open: bool = False
     robbery_triggered: bool = False
     jewel_taken: bool = False
-    seen: dict = field(default_factory=dict)
     current_room: str = 'foyer'
     exit_attempted: bool = False
     warning_timer: float = 0.0
@@ -41,10 +40,13 @@ class Stage:
                     self.exit_attempted = True
                     return False
                 self.current_room = door.target
-                self.seen.clear()
                 player.x, player.y = self.room.point(*door.arrival)
                 return True
         return False
+
+    @property
+    def vault_restricted(self):
+        return not (self.safe_open or self.security_disabled)
 
     def hazard_of(self, player):
         # A visitor is not suspicious just for being visible.
@@ -52,7 +54,7 @@ class Stage:
             return ('stolen_jewel_visible', 2)
         if player.held_item == 'knife' and self.current_room != 'kitchen':
             return ('knife_outside_kitchen', 2)
-        if self.current_room == 'vault' and not (self.safe_open or self.security_disabled):
+        if self.current_room == 'vault' and self.vault_restricted:
             return ('restricted_study', 1)
         return None
 
@@ -64,14 +66,8 @@ class Stage:
         if self.photographer_busy and npc.character == 'photographer':
             return None
         hazard = self.hazard_of(player)
-        signature = hazard[0] if hazard else None
-        visible = npc.can_see(player)
-        if not visible or signature is None:
-            self.seen.pop(npc.character, None)
+        if hazard is None or not npc.can_see(player):
             return None
-        if self.seen.get(npc.character) == signature:
-            return None
-        self.seen[npc.character] = signature
         value = hazard[1]
         self.suspicion = min(4, self.suspicion + value)
         self.warning_timer = 1.8

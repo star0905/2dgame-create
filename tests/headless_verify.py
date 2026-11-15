@@ -218,3 +218,33 @@ stage.current_room = 'hall'
 assert stage.can_move(*stage.room.point(750, 780))
 assert not stage.can_move(*stage.room.point(504, 850))
 print('PASS: furniture footprints, open floor, and corridor wall')
+
+# Cooldown ticks through the play loop and the same NPC can notice again.
+game_framework.change_mode(play_mode)
+play_mode.stage.current_room = 'vault'
+guard = play_mode.npcs[2]
+assert play_mode.stage.can_move(guard.x, guard.y)
+play_mode.player.x, play_mode.player.y = guard.x, guard.y - 40
+visible_to_guard = True
+guard.can_see = lambda player: visible_to_guard
+game_framework.frame_time = 0.5
+play_mode.update()
+assert play_mode.stage.suspicion == 1
+for _ in range(4):
+    play_mode.update()
+assert play_mode.stage.suspicion == 1
+play_mode.update()
+assert play_mode.stage.suspicion == 2
+visible_to_guard = False
+for _ in range(5):
+    play_mode.update()
+assert play_mode.stage.suspicion == 2
+visible_to_guard = True
+play_mode.stage.security_disabled = True
+play_mode.update()
+assert play_mode.stage.suspicion == 2
+assert play_mode.player.pickup('jewel')
+play_mode.update()
+assert game_framework.current_mode is result_mode
+assert not result_mode.victory and not result_mode.withdrawal_ending
+print('PASS: repeated witnessing, breaking line of sight, alarm bypass and jewel penalty')

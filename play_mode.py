@@ -28,7 +28,7 @@ def init():
     npcs = [
         NPC('owner', '김재현 (부자)', 'banquet', [(547, 200), (549, 212)], 24),
         NPC('athlete', '박준혁 (태권도 선수)', 'hall', [(752, 870), (764, 881)], 32),
-        NPC('it_expert', '이도현 (IT 전문가)', 'vault', [(1433, 787), (1434, 804)], 30),
+        NPC('it_expert', '이도현 (IT 전문가)', 'vault', [(1174, 760), (1174, 789)], 30),
         NPC('chef', '서유진 (요리사)', 'kitchen', [(1360, 244), (1391, 251)], 30),
         NPC('photographer', '정수빈 (사진작가)', 'banquet', [(907, 195), (912, 211)], 28),
         NPC('planner', '한지우 (파티 총무)', 'study', [(348, 718), (359, 743)], 26),
@@ -225,6 +225,7 @@ def handle_events():
 def update():
     global msg_timer, notice_text, notice_timer
     dt = game_framework.frame_time
+    stage.update(dt)
     room_before = stage.current_room
     game_world.update(dt)
     msg_timer = max(0, msg_timer - dt)
@@ -260,10 +261,13 @@ def draw():
 
     for door in stage.room.doors:
         x, y = stage.room.point(*door.point)
-        width = 39 + 13 * len(door.label)
+        restricted = door.target == 'vault' and stage.vault_restricted
+        label = '금고실 · 출입 제한' if restricted else door.label
+        label_color = (255, 169, 151) if restricted else (251, 223, 153)
+        width = 39 + 13 * len(label)
         draw_rectangle(int(x - width / 2), int(y - 12), int(x + width / 2),
                        int(y + 13), 31, 24, 23, 245, filled=True)
-        text(int(x - 8 * len(door.label)), int(y + 7), door.label, 15, (251, 223, 153))
+        text(int(x - 7 * len(label)), int(y + 7), label, 15, label_color)
 
     image_for(ASSETS / 'rooms' / 'trim.png').draw(480, 590, 920, 6)
     text(24, 624, f'CASE 01  ·  {stage.room.label}', 22, (255, 243, 207))
