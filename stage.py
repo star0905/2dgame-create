@@ -1,6 +1,5 @@
 """Room/background + small amount of stage geometry and game flags."""
 from dataclasses import dataclass, field
-from math import hypot
 from rooms import ROOMS
 
 
@@ -33,13 +32,7 @@ class Stage:
         if not (left + radius <= x <= right - radius and
                 bottom + radius <= y <= top - radius):
             return False
-        for box in self.room.furniture:
-            x0, y0, x1, y1 = self.room.rect(box)
-            cx = max(x0, min(x, x1))
-            cy = max(y0, min(y, y1))
-            if hypot(x - cx, y - cy) < radius:
-                return False
-        return True
+        return not self.room.blocks_furniture(x, y, radius)
 
     def cross_door(self, player, dx, dy):
         for door in self.room.doors:

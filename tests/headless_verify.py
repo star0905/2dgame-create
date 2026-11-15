@@ -198,3 +198,23 @@ for _ in range(60):
 assert game_framework.current_mode is result_mode
 assert result_mode.victory and not result_mode.withdrawal_ending
 print('PASS: withdrawal ending, retry, and jewel exit')
+
+# Distinguish walkable floor near furniture from the solid footprints.
+for room_name, walkable, solid in (
+    ('banquet', ((765, 289), (615, 405)), ((765, 330), (765, 402))),
+    ('vault', ((1402, 843), (1368, 740)), ((1402, 887), (1445, 882), (1406, 737))),
+    ('kitchen', ((1180, 402), (1265, 293)), ((1178, 449), (1265, 337))),
+    ('study', ((214, 735), (289, 735)), ((250, 737), (250, 788))),
+    ('foyer', ((77, 196),), ((97, 176),)),
+):
+    stage.current_room = room_name
+    for point in walkable:
+        assert stage.can_move(*stage.room.point(*point)), (room_name, point)
+    for point in solid:
+        assert not stage.can_move(*stage.room.point(*point)), (room_name, point)
+
+# The corridor rug is walkable, but its side wall still stops the player.
+stage.current_room = 'hall'
+assert stage.can_move(*stage.room.point(750, 780))
+assert not stage.can_move(*stage.room.point(504, 850))
+print('PASS: furniture footprints, open floor, and corridor wall')
