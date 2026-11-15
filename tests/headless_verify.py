@@ -122,3 +122,49 @@ for i in range(10):
     play_mode.update()
 play_mode.finish()
 print('PASS: 8 RGBA sheets, 16 frames each, direction clipping, movement, interactions, stage branching, scene init/render')
+
+# Empty carpet beside the study chair is reachable, while the chair and desk
+# still block the player's feet.
+study = ROOMS['study']
+stage.current_room = 'study'
+assert stage.can_move(*study.point(213, 733))
+assert stage.can_move(*study.point(288, 733))
+assert not stage.can_move(*study.point(250, 737))
+assert not stage.can_move(*study.point(250, 786))
+
+# Send E through the normal event handler, including competing targets.
+from types import SimpleNamespace
+
+play_mode.init()
+player = play_mode.player
+protein = play_mode.items[2]
+player.x, player.y = protein.x - 65, protein.y
+player.sprite.set_facing('right')
+assert play_mode._nearest_interactable() is protein
+assert '프로틴' in play_mode._interaction_hint(protein)
+press_e = SimpleNamespace(type=lib.SDL_KEYDOWN, key=sdl.SDLK_e)
+play_mode.get_events = lambda: [press_e]
+play_mode.handle_events()
+assert player.held_item == 'protein' and not protein.visible
+
+play_mode.stage.current_room = 'vault'
+safe, alarm = play_mode.props[:2]
+player.x, player.y = safe.x, safe.y - 60
+player.sprite.set_facing('up')
+assert play_mode._nearest_interactable() is safe
+play_mode.handle_events()
+assert play_mode.input_code_mode
+
+play_mode.init()
+play_mode.stage.current_room = 'banquet'
+npc = play_mode.npcs[0]
+coffee = play_mode.items[3]
+play_mode.player.x, play_mode.player.y = 450, 375
+npc.x, npc.y = 450, 318
+coffee.x, coffee.y = 450, 435
+play_mode.player.sprite.set_facing('up')
+assert play_mode._nearest_interactable() is coffee
+play_mode.player.sprite.set_facing('down')
+assert play_mode._nearest_interactable() is npc
+play_mode.finish()
+print('PASS: study furniture edges, E pickup, E safe input, facing preference')

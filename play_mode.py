@@ -14,11 +14,13 @@ from ui import text
 
 # Training/demo value only, not a canonically finalized puzzle answer.
 DEMO_SAFE_CODE = '1125'
-INTERACT_RANGE = 62
+INTERACT_RANGE = 74
+FACING_VECTORS = {'up': (0, 1), 'down': (0, -1), 'left': (-1, 0), 'right': (1, 0)}
 
 
 def init():
     global stage, player, npcs, items, props, message, input_code_mode, entered_code, msg_timer
+    global notice_text, notice_timer
     game_world.clear()
     stage = Stage()
     game_world.add_object(MansionMap(stage), 0)
@@ -46,6 +48,8 @@ def init():
         game_world.add_object(obj, 1)
     message = '목표: 보석을 확보해 현장을 빠져나가세요. [E] 조사/대화  [Q] 내려놓기'
     msg_timer = 15
+    notice_text = ''
+    notice_timer = 0
     input_code_mode = False
     entered_code = ''
 
@@ -66,12 +70,28 @@ def _end(won, reason):
 
 
 def _nearest_interactable():
-    targets = [obj for obj in npcs + items + props
-               if obj.room == stage.current_room and obj.visible]
-    if not targets:
-        return None
-    near = min(targets, key=lambda obj: hypot(player.x - obj.x, player.y - obj.y))
-    return near if hypot(near.x-player.x, near.y-player.y) <= INTERACT_RANGE else None
+    facing_x, facing_y = FACING_VECTORS[player.sprite.facing]
+    candidates = []
+    for obj in npcs + items + props:
+        if obj.room != stage.current_room or not obj.visible:
+            continue
+        dx, dy = obj.x - player.x, obj.y - player.y
+        distance = hypot(dx, dy)
+        if distance <= INTERACT_RANGE:
+            # A modest preference for facing the target helps with nearby
+            # objects without making interactions depend on an exact angle.
+            alignment = (dx * facing_x + dy * facing_y) / max(1, distance)
+            candidates.append((distance - 16 * alignment, obj))
+    return min(candidates, key=lambda candidate: candidate[0])[1] if candidates else None
+
+
+def _interaction_hint(target):
+    if isinstance(target, NPC):
+        action = '협박' if target.character == 'owner' and player.held_item == 'knife' else '대화'
+        return f'[E] {target.display_name} {action}'
+    if isinstance(target, WorldItem):
+        return f'[E] {ITEM_LABELS[target.item_name]} 줍기'
+    return f'[E] {target.label} 조사'
 
 
 def _interact_npc(npc):
@@ -141,7 +161,7 @@ def _interact_prop(prop):
 def interact():
     target = _nearest_interactable()
     if target is None:
-        _say('주변에 조사하거나 대화할 대상이 없습니다.', 2.5)
+        _say('대상에게 조금 더 가까이 가세요. 상호작용할 수 있으면 [E]가 표시됩니다.', 2.5)
         return
     if isinstance(target, NPC):
         _interact_npc(target)
@@ -203,13 +223,14 @@ def handle_events():
 
 
 def update():
-    global msg_timer
+    global msg_timer, notice_text, notice_timer
     dt = game_framework.frame_time
     room_before = stage.current_room
     game_world.update(dt)
     msg_timer = max(0, msg_timer - dt)
+    notice_timer = max(0, notice_timer - dt)
     if stage.current_room != room_before:
-        _say(stage.room.label, 1.7)
+        notice_timer = 0
     if stage.exit_attempted:
         stage.exit_attempted = False
         if player.held_item == 'jewel':
@@ -220,7 +241,8 @@ def update():
         for npc in npcs:
             notice = stage.notice(npc, player)
             if notice:
-                _say(notice, 4)
+                notice_text = notice
+                notice_timer = 4
                 if stage.suspicion >= 4:
                     _end(False, 'NPC의 목격으로 의심도가 최대치에 도달했습니다.')
                     return
@@ -246,9 +268,15 @@ def draw():
     text(24, 624, f'CASE 01  ·  {stage.room.label}', 22, (255, 243, 207))
     text(765, 623, f'의심도  {stage.suspicion} / 4', 19,
          (249, 151, 154) if stage.suspicion >= 3 else (253, 240, 190))
+    if notice_timer > 0:
+        text(280, 620, notice_text, 14, (249, 151, 145))
     draw_rectangle(0, 0, 959, 93, 29, 23, 22, 255, filled=True)
     held = ITEM_LABELS.get(player.held_item, '없음')
     text(24, 82, f'소지품  {held}', 17, (251, 222, 157))
+    if not input_code_mode:
+        target = _nearest_interactable()
+        if target is not None:
+            text(310, 82, _interaction_hint(target), 17, (255, 230, 160))
     text(24, 53, message if msg_timer > 0 else '보석을 확보해 현관으로 돌아가세요.', 17)
     text(24, 22, 'WASD / 방향키 이동     E 대화·조사     Q 내려놓기     Esc 종료', 14, (205, 192, 180))
     if input_code_mode:
