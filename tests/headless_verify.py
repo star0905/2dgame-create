@@ -248,3 +248,63 @@ play_mode.update()
 assert game_framework.current_mode is result_mode
 assert not result_mode.victory and not result_mode.withdrawal_ending
 print('PASS: repeated witnessing, breaking line of sight, alarm bypass and jewel penalty')
+
+# Pick up case files while holding an ordinary item. Investigations spend
+# a charge once per room, freeze the reconstruction, and preserve its state.
+from investigation import EVIDENCE
+game_framework.change_mode(play_mode)
+case = play_mode.investigation
+assert play_mode.player.pickup('knife')
+packet = case.files[0]
+play_mode.player.x, play_mode.player.y = packet.x, packet.y
+def press(key):
+    play_mode.get_events = lambda: [SimpleNamespace(type=lib.SDL_KEYDOWN, key=key)]
+    play_mode.handle_events()
+press(sdl.SDLK_e)
+assert case.charges == 2 and not packet.visible
+press(ord('h'))
+assert case.active and case.charges == 1
+position = play_mode.player.x, play_mode.player.y
+npc_positions = [(n.x, n.y) for n in play_mode.npcs]
+play_mode.stage.invulnerability_timer = 1.5
+play_mode.player.keys.add(sdl.SDLK_w)
+play_mode.update()
+assert (play_mode.player.x, play_mode.player.y) == position
+assert [(n.x, n.y) for n in play_mode.npcs] == npc_positions
+assert play_mode.stage.invulnerability_timer == 1.5
+assert play_mode.player.held_item == 'knife'
+case.x, case.y = ROOMS['foyer'].point(*EVIDENCE['foyer'][1])
+press(sdl.SDLK_e)
+assert 'foyer' in case.notes
+play_mode.draw()
+press(ord('n'))
+assert case.notebook
+play_mode.draw()
+press(sdl.SDLK_ESCAPE)
+assert case.active and not case.notebook
+press(ord('h'))
+assert not case.active
+assert not play_mode.player.keys
+press(ord('h'))
+assert case.charges == 1
+press(ord('h'))
+# Unlock another room and inspect every evidence marker at reachable coordinates.
+play_mode.stage.current_room = 'hall'
+play_mode.player.x, play_mode.player.y = ROOMS['hall'].point(750, 800)
+press(ord('h'))
+assert case.charges == 0 and case.active
+press(ord('h'))
+play_mode.stage.current_room = 'vault'
+press(ord('h'))
+assert not case.active and case.charges == 0
+for room_name, (_, point, _) in EVIDENCE.items():
+    play_mode.stage.current_room = room_name
+    assert play_mode.stage.can_move(*ROOMS[room_name].point(*point)), room_name
+    case.x, case.y = ROOMS[room_name].point(*point)
+    case.inspect(room_name)
+assert len(case.notes) == 6
+game_framework.change_mode(play_mode)
+assert play_mode.investigation.charges == 0
+assert not play_mode.investigation.notes
+assert all(f.visible for f in play_mode.investigation.files)
+print('PASS: files, consumption, frozen reconstruction, notebook, all evidence and reset')

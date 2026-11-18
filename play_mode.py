@@ -1,12 +1,14 @@
 """Mansion case with a fixed camera for each room."""
 from math import hypot
+from investigation import Investigation, CaseFile
 from pico2d import clear_canvas, update_canvas, get_events, draw_rectangle, SDL_KEYDOWN, SDL_QUIT
-from sdl2 import SDLK_ESCAPE, SDLK_e, SDLK_q, SDLK_SPACE, SDLK_RETURN, SDLK_BACKSPACE
+from sdl2 import (SDLK_ESCAPE, SDLK_e, SDLK_q, SDLK_SPACE, SDLK_RETURN, SDLK_BACKSPACE,
+                  SDLK_LEFT, SDLK_RIGHT, SDLK_UP, SDLK_DOWN)
 import game_world
 import game_framework
 from stage import Stage
 from rooms import MansionMap, ROOMS
-from player import Player
+from player import Player, MOVE
 from npc import NPC
 from item import WorldItem, FixedProp, ITEM_LABELS
 from sprite import ASSETS, image_for
@@ -20,7 +22,8 @@ FACING_VECTORS = {'up': (0, 1), 'down': (0, -1), 'left': (-1, 0), 'right': (1, 0
 
 def init():
     global stage, player, npcs, items, props, message, input_code_mode, entered_code, msg_timer
-    global notice_text, notice_timer
+    global notice_text, notice_timer, investigation
+    investigation = Investigation()
     game_world.clear()
     stage = Stage()
     game_world.add_object(MansionMap(stage), 0)
@@ -46,7 +49,7 @@ def init():
     ]
     for obj in npcs + [player]:
         game_world.add_object(obj, 1)
-    message = '목표: 보석을 확보해 현장을 빠져나가세요. [E] 조사/대화  [Q] 내려놓기'
+    message = '종이 묶음을 [E]로 획득하고 [H]로 현장을 조사해 보세요. 목표는 보석 확보와 탈출입니다.'
     msg_timer = 15
     notice_text = ''
     notice_timer = 0
@@ -72,7 +75,7 @@ def _end(won, reason, *, abandoned=False):
 def _nearest_interactable():
     facing_x, facing_y = FACING_VECTORS[player.sprite.facing]
     candidates = []
-    for obj in npcs + items + props:
+    for obj in npcs + items + props + investigation.files:
         if obj.room != stage.current_room or not obj.visible:
             continue
         dx, dy = obj.x - player.x, obj.y - player.y
@@ -86,6 +89,8 @@ def _nearest_interactable():
 
 
 def _interaction_hint(target):
+    if isinstance(target, CaseFile):
+        return '[E] 현장 조사 자료 획득'
     if isinstance(target, NPC):
         action = '협박' if target.character == 'owner' and player.held_item == 'knife' else '대화'
         return f'[E] {target.display_name} {action}'
@@ -163,7 +168,11 @@ def interact():
     if target is None:
         _say('대상에게 조금 더 가까이 가세요. 상호작용할 수 있으면 [E]가 표시됩니다.', 2.5)
         return
-    if isinstance(target, NPC):
+    if isinstance(target, CaseFile):
+        target.visible = False
+        investigation.charges += 2
+        _say('현장 조사 자료 2개 획득. 원하는 방에서 [H]로 사용하세요.', 9)
+    elif isinstance(target, NPC):
         _interact_npc(target)
     elif isinstance(target, WorldItem):
         if player.pickup(target.item_name):
@@ -203,11 +212,39 @@ def handle_events():
         if event.type == SDL_QUIT:
             game_framework.quit_game()
             return
+        if investigation.notebook:
+            if event.type == SDL_KEYDOWN:
+                if event.key in (ord('n'), SDLK_ESCAPE):
+                    investigation.notebook = False
+                    player.keys.clear()
+                elif event.key in (ord('a'), ord('w'), SDLK_LEFT, SDLK_UP):
+                    investigation.note_page -= 1
+                elif event.key in (ord('d'), ord('s'), SDLK_RIGHT, SDLK_DOWN):
+                    investigation.note_page += 1
+            continue
+        if investigation.active:
+            player.handle_event(event)
+            if event.type == SDL_KEYDOWN:
+                if event.key in (ord('h'), SDLK_ESCAPE):
+                    investigation.close(player)
+                elif event.key == ord('n'):
+                    investigation.notebook = True
+                    player.keys.clear()
+                elif event.key == SDLK_e:
+                    _say(investigation.inspect(stage.current_room), 8)
+            continue
         if input_code_mode:
             _handle_safe_input(event)
             continue
         player.handle_event(event)
         if event.type == SDL_KEYDOWN:
+            if event.key == ord('h'):
+                _say(investigation.open_scene(stage.current_room, player), 8)
+                continue
+            if event.key == ord('n'):
+                investigation.notebook = True
+                player.keys.clear()
+                continue
             if event.key == SDLK_ESCAPE:
                 game_framework.quit_game()
                 return
@@ -225,6 +262,27 @@ def handle_events():
 def update():
     global msg_timer, notice_text, notice_timer
     dt = game_framework.frame_time
+    if investigation.notebook:
+        return
+    if investigation.active:
+        # The detective moves independently within this room.
+        x, y = investigation.x, investigation.y
+        vx = int(any(k in player.keys for k in MOVE['right'])) - int(any(k in player.keys for k in MOVE['left']))
+        vy = int(any(k in player.keys for k in MOVE['up'])) - int(any(k in player.keys for k in MOVE['down']))
+        distance = max(1, hypot(vx, vy))
+        nx = x + vx / distance * player.speed * dt
+        ny = y + vy / distance * player.speed * dt
+        if stage.can_move(nx, y):
+            x = nx
+        if stage.can_move(x, ny):
+            y = ny
+        if vx:
+            investigation.detective.set_facing('right' if vx > 0 else 'left')
+        elif vy:
+            investigation.detective.set_facing('up' if vy > 0 else 'down')
+        investigation.detective.update(dt, bool(vx or vy))
+        investigation.x, investigation.y = x, y
+        return
     stage.update(dt)
     room_before = stage.current_room
     game_world.update(dt)
@@ -254,10 +312,13 @@ def draw():
     clear_canvas()
     draw_rectangle(0, 0, 959, 639, 12, 11, 13, 255, filled=True)
     game_world.world[0][0].draw()
-    objects = [obj for obj in npcs + items + props
+    objects = [obj for obj in npcs + items + props + investigation.files
                if obj.room == stage.current_room and obj.visible]
-    for obj in sorted(objects + [player], key=lambda actor: actor.y, reverse=True):
-        obj.draw()
+    if investigation.active:
+        investigation.draw_scene(stage.current_room)
+    else:
+        for obj in sorted(objects + [player], key=lambda actor: actor.y, reverse=True):
+            obj.draw()
 
     for door in stage.room.doors:
         x, y = stage.room.point(*door.point)
@@ -270,7 +331,8 @@ def draw():
         text(int(x - 7 * len(label)), int(y + 7), label, 15, label_color)
 
     image_for(ASSETS / 'rooms' / 'trim.png').draw(480, 590, 920, 6)
-    text(24, 624, f'CASE 01  ·  {stage.room.label}', 22, (255, 243, 207))
+    period = '사건 이후' if investigation.active else '범행 재현'
+    text(24, 624, f'{period}  ·  {stage.room.label}', 22, (255, 243, 207))
     text(765, 623, f'의심도  {stage.suspicion} / 4', 19,
          (249, 151, 154) if stage.suspicion >= 3 else (253, 240, 190))
     if notice_timer > 0:
@@ -278,12 +340,16 @@ def draw():
     draw_rectangle(0, 0, 959, 93, 29, 23, 22, 255, filled=True)
     held = ITEM_LABELS.get(player.held_item, '없음')
     text(24, 82, f'소지품  {held}', 17, (251, 222, 157))
-    if not input_code_mode:
+    if not input_code_mode and not investigation.active:
         target = _nearest_interactable()
         if target is not None:
             text(310, 82, _interaction_hint(target), 17, (255, 230, 160))
     text(24, 53, message if msg_timer > 0 else '보석을 확보해 현관으로 돌아가세요.', 17)
-    text(24, 22, 'WASD / 방향키 이동     E 대화·조사     Q 내려놓기     Esc 종료', 14, (205, 192, 180))
+    text(24, 22, f'이동 WASD / 방향키   E 조사   Q 내려놓기   H 현장 조사 ({investigation.charges})   N 수첩', 14, (205, 192, 180))
+    if investigation.active:
+        text(310, 82, '[E] 흔적 조사    [H / Esc] 재현으로 복귀', 17, (173, 228, 250))
+    if investigation.notebook:
+        investigation.draw_notebook()
     if input_code_mode:
         draw_rectangle(235, 250, 725, 411, 32, 23, 25, 255, filled=True)
         draw_rectangle(235, 250, 725, 411, 180, 135, 82)
