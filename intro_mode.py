@@ -79,7 +79,6 @@ def draw():
     draw_rectangle(36, 30, 924, 263, 31, 24, 24, filled=True)
     draw_rectangle(36, 30, 924, 263, 155, 112, 72)
     text(63, 239, '탐정 윤시현', 26, (255, 218, 151))
-    text(744, 233, f'{page + 1} / {len(DIALOGUE)}', 16, (229, 210, 185))
     for index, line in enumerate(DIALOGUE[page]):
         text(64, 185 - index * 35, line, 22, (255, 247, 227))
 

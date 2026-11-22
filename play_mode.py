@@ -8,6 +8,7 @@ from sdl2 import (SDLK_ESCAPE, SDLK_e, SDLK_q, SDLK_SPACE, SDLK_RETURN, SDLK_BAC
                   SDLK_LEFT, SDLK_RIGHT, SDLK_UP, SDLK_DOWN)
 import game_world
 import game_framework
+import game_settings
 from stage import Stage
 from rooms import MansionMap, ROOMS
 from player import Player, MOVE
@@ -29,7 +30,8 @@ def init():
     dialogue = Dialogue()
     dialogue.start(WELCOME)
     game_world.clear()
-    stage = Stage()
+    stage = Stage(preparation_remaining=float(game_settings.preparation_seconds),
+                  difficulty=game_settings.difficulty)
     game_world.add_object(MansionMap(stage), 0)
     player = Player(stage)
     npcs = [
@@ -113,6 +115,9 @@ def _interaction_hint(target):
 
 
 def _interact_npc(npc):
+    if not stage.can_prepare and npc.character in ('athlete', 'it_expert', 'photographer', 'chef'):
+        _speak((('상황', '준비가 종료되었습니다. 남은 준비 상태로 범행을 진행해야 합니다.'),))
+        return
     if npc.character == 'athlete':
         if npc.sleeping:
             _speak((('상황', '박준혁은 잠들어 있다. 말을 걸어도 대답하지 않는다.'),))
@@ -151,6 +156,7 @@ def _interact_npc(npc):
         if player.held_item == 'knife':
             # The threat is a separate game event, not a regular suspicion trigger.
             player.drop()
+            stage.finish_preparation()
             passed, explanation = stage.robbery_outcome()
             if passed:
                 _say('강도 이벤트 성공: ' + explanation, 10)
@@ -194,7 +200,13 @@ def interact():
     elif isinstance(target, NPC):
         _interact_npc(target)
     elif isinstance(target, WorldItem):
+        if not stage.can_prepare and target.item_name != 'jewel' and not target.dropped:
+            _say('준비가 종료되어 도구를 얻거나 조합할 수 없습니다.', 5)
+            return
         if {player.held_item, target.item_name} == {'coffee', 'sleeping_pills'}:
+            if not stage.can_prepare:
+                _say('준비가 종료되어 새 조합을 만들 수 없습니다.', 5)
+                return
             player.held_item = 'sleeping_coffee'
             target.visible = False
             _say('커피와 수면제를 조합했습니다. 선수에게 가져가 보세요.', 8)
@@ -220,6 +232,7 @@ def _handle_safe_input(event):
         entered_code = entered_code[:-1]
     elif key in (SDLK_RETURN, SDLK_SPACE):
         if entered_code == DEMO_SAFE_CODE:
+            stage.finish_preparation()
             stage.safe_open = True
             _say('비밀번호가 일치합니다. 금고가 열렸습니다. [E]로 보석을 가져가세요.')
         else:
@@ -286,7 +299,7 @@ def handle_events():
             elif event.key == SDLK_q:
                 old = player.drop()
                 if old:
-                    items.append(WorldItem(old, stage.current_room, player.x, player.y))
+                    items.append(WorldItem(old, stage.current_room, player.x, player.y, dropped=True))
                     _say(f'{ITEM_LABELS[old]} 내려놓음')
 
 
@@ -295,7 +308,7 @@ def update():
     dt = game_framework.frame_time
     if dialogue.active:
         return
-    if investigation.notebook:
+    if investigation.notebook or input_code_mode:
         return
     if investigation.active:
         # The detective moves independently within this room.
@@ -316,7 +329,10 @@ def update():
         investigation.detective.update(dt, bool(vx or vy))
         investigation.x, investigation.y = x, y
         return
+    was_preparing = stage.can_prepare
     stage.update(dt)
+    if was_preparing and not stage.can_prepare:
+        _say('준비 시간이 끝났습니다. 확보한 도구로 협박하거나 금고 암호를 입력하세요.', 10)
     room_before = stage.current_room
     game_world.update(dt)
     msg_timer = max(0, msg_timer - dt)
@@ -368,8 +384,11 @@ def draw():
     text(24, 624, f'{period}  ·  {stage.room.label}', 22, (255, 243, 207))
     text(765, 623, f'의심도  {stage.suspicion} / 4', 19,
          (249, 151, 154) if stage.suspicion >= 3 else (253, 240, 190))
+    phase = '준비 ' + game_settings.clock(stage.preparation_remaining) if stage.can_prepare else '준비 종료'
+    text(390, 622, f'{game_settings.LABELS[stage.difficulty]} · {phase}', 19,
+         (255, 159, 137) if stage.can_prepare and stage.preparation_remaining <= 30 else (255, 231, 177))
     if notice_timer > 0:
-        text(280, 620, notice_text, 14, (249, 151, 145))
+        text(280, 590, notice_text, 14, (249, 151, 145))
     draw_rectangle(0, 0, 959, 93, 29, 23, 22, 255, filled=True)
     held = ITEM_LABELS.get(player.held_item, '없음')
     text(24, 82, f'소지품  {held}', 17, (251, 222, 157))

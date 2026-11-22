@@ -440,3 +440,76 @@ print('PASS: study expert, surface pickup points, three clues and dining lanes')
 
 assert not any(obj.room == 'foyer' for obj in play_mode.items)
 print('PASS: no loose item bottles in the foyer')
+
+# Title settings flow into the new run and retry uses the same selection.
+import game_settings
+game_framework.change_mode(title_mode)
+def title_key(key):
+    title_mode.get_events = lambda: [SimpleNamespace(type=lib.SDL_KEYDOWN, key=key)]
+    title_mode.handle_events()
+assert game_settings.difficulty == 'normal'
+title_key(sdl.SDLK_RIGHT)
+assert game_settings.difficulty == 'hard' and game_settings.preparation_seconds == 60
+title_key(sdl.SDLK_DOWN)
+title_key(sdl.SDLK_LEFT)
+assert game_settings.preparation_seconds == 45
+for _ in range(40):
+    title_key(sdl.SDLK_LEFT)
+assert game_settings.preparation_seconds == 30
+for _ in range(40):
+    title_key(sdl.SDLK_RIGHT)
+assert game_settings.preparation_seconds == 300
+title_key(sdl.SDLK_UP)
+title_key(sdl.SDLK_LEFT)
+assert game_settings.difficulty == 'normal' and game_settings.preparation_seconds == 180
+game_settings.select_difficulty('hard')
+game_settings.adjust_time(-1)
+game_framework.change_mode(play_mode)
+assert play_mode.stage.preparation_remaining == 45
+assert play_mode.stage.difficulty == 'hard'
+play_mode.update()
+assert play_mode.stage.preparation_remaining == 45  # Welcome scene pauses.
+play_mode.dialogue.pages = []
+game_framework.frame_time = 0.5
+play_mode.update()
+assert play_mode.stage.preparation_remaining == 44.5
+play_mode.investigation.notebook = True
+play_mode.update()
+assert play_mode.stage.preparation_remaining == 44.5
+play_mode.investigation.notebook = False
+play_mode.stage.preparation_remaining = 0.25
+play_mode.update()
+assert not play_mode.stage.can_prepare and play_mode.stage.preparation_remaining == 0
+expert = play_mode.npcs[2]
+play_mode.stage.current_room = expert.room
+play_mode.player.x, play_mode.player.y = expert.x, expert.y
+press(sdl.SDLK_e)
+assert not play_mode.stage.security_disabled
+play_mode.dialogue.pages = []
+# The code route still opens the safe after the preparation timeout.
+play_mode.stage.current_room = 'vault'
+safe = play_mode.props[0]
+play_mode.player.x, play_mode.player.y = safe.x, safe.y
+press(sdl.SDLK_e)
+for key in [*map(ord, '1125'), sdl.SDLK_RETURN]:
+    play_mode._handle_safe_input(SimpleNamespace(type=lib.SDL_KEYDOWN, key=key))
+assert play_mode.stage.safe_open
+game_framework.change_mode(play_mode)
+assert play_mode.stage.preparation_remaining == 45 and play_mode.stage.can_prepare
+play_mode.dialogue.pages = []
+play_mode.stage.finish_preparation()
+play_mode.update()
+assert play_mode.stage.preparation_remaining == 45
+game_settings.select_difficulty('normal')
+print('PASS: difficulty UI, custom times, limits, pause, expiration, code route and reset')
+
+# Dropping an already obtained tool after timeout must not destroy access to it.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+play_mode.stage.finish_preparation()
+play_mode.player.pickup('knife')
+press(sdl.SDLK_q)
+assert play_mode.items[-1].dropped
+press(sdl.SDLK_e)
+assert play_mode.player.held_item == 'knife'
+print('PASS: previously obtained tools can be dropped and recovered after preparation')

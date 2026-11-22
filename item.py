@@ -14,10 +14,11 @@ def item_image(item_name):
 
 
 class WorldItem:
-    def __init__(self, item_name, room, x, y, display_position=None):
+    def __init__(self, item_name, room, x, y, display_position=None, dropped=False):
         self.item_name = item_name
         self.room = room
         self.x, self.y = x, y
+        self.dropped = dropped
         self.display_position = display_position
         self.image = item_image(item_name)
         self.visible = True

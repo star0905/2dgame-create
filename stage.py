@@ -17,8 +17,22 @@ class Stage:
     warning_timer: float = 0.0
     invulnerability_timer: float = 0.0
     warning_message: str = ''
+    preparation_remaining: float = 180.0
+    difficulty: str = 'normal'
+    preparation_finished: bool = False
+
+    @property
+    def can_prepare(self):
+        return not self.preparation_finished and self.preparation_remaining > 0
+
+    def finish_preparation(self):
+        self.preparation_finished = True
 
     def update(self, dt):
+        if self.can_prepare:
+            self.preparation_remaining = max(0.0, self.preparation_remaining - max(0.0, dt))
+            if self.preparation_remaining == 0:
+                self.finish_preparation()
         self.warning_timer = max(0.0, self.warning_timer - dt)
         self.invulnerability_timer = max(0.0, self.invulnerability_timer - dt)
 
