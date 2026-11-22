@@ -112,7 +112,7 @@ assert play_mode._nearest_interactable() is None
 play_mode.player.keys.clear()
 play_mode.draw()
 
-assert len(play_mode.items)==4
+assert len(play_mode.items)==3
 assert play_mode.player.character=='culprit'
 # Ensure every actor and item has a readable sprite/image.
 for o in play_mode.npcs + play_mode.items + play_mode.props + [play_mode.player]:
@@ -139,15 +139,16 @@ from types import SimpleNamespace
 play_mode.init()
 play_mode.dialogue.pages = []
 player = play_mode.player
-protein = play_mode.items[2]
-player.x, player.y = protein.x - 65, protein.y
+coffee = play_mode.items[2]
+play_mode.stage.current_room = coffee.room
+player.x, player.y = coffee.x, coffee.y
 player.sprite.set_facing('right')
-assert play_mode._nearest_interactable() is protein
-assert '프로틴' in play_mode._interaction_hint(protein)
+assert play_mode._nearest_interactable() is coffee
+assert '커피' in play_mode._interaction_hint(coffee)
 press_e = SimpleNamespace(type=lib.SDL_KEYDOWN, key=sdl.SDLK_e)
 play_mode.get_events = lambda: [press_e]
 play_mode.handle_events()
-assert player.held_item == 'protein' and not protein.visible
+assert player.held_item == 'coffee' and not coffee.visible
 
 play_mode.stage.current_room = 'vault'
 safe, alarm = play_mode.props[:2]
@@ -161,7 +162,7 @@ play_mode.init()
 play_mode.dialogue.pages = []
 play_mode.stage.current_room = 'banquet'
 npc = play_mode.npcs[0]
-coffee = play_mode.items[3]
+coffee = play_mode.items[2]
 play_mode.player.x, play_mode.player.y = 450, 375
 npc.x, npc.y = 450, 318
 coffee.x, coffee.y = 450, 435
@@ -326,7 +327,7 @@ assert all(f.visible for f in play_mode.investigation.files)
 print('PASS: files, consumption, frozen reconstruction, notebook, all evidence and reset')
 
 # Combining works in either order and consumes each ingredient once.
-for first_index, second_index in ((3, 1), (1, 3)):
+for first_index, second_index in ((2, 1), (1, 2)):
     game_framework.change_mode(play_mode)
     play_mode.dialogue.pages = []
     actor = play_mode.player
@@ -418,7 +419,7 @@ expert = play_mode.npcs[2]
 assert expert.room == 'study'
 play_mode.stage.current_room = 'study'
 assert all(play_mode.stage.can_move(*point) for point in expert.path)
-for index in (0, 1, 3):
+for index in (0, 1, 2):
     obj = play_mode.items[index]
     play_mode.stage.current_room = obj.room
     assert obj.display_position is not None
@@ -436,3 +437,6 @@ play_mode.stage.current_room = 'banquet'
 for point in ((770, 220), (770, 427), (585, 298), (992, 298)):
     assert play_mode.stage.can_move(*ROOMS['banquet'].point(*point)), point
 print('PASS: study expert, surface pickup points, three clues and dining lanes')
+
+assert not any(obj.room == 'foyer' for obj in play_mode.items)
+print('PASS: no loose item bottles in the foyer')

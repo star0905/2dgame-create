@@ -45,7 +45,6 @@ def init():
                   display_position=ROOMS['kitchen'].point(1260, 313)),
         WorldItem('sleeping_pills', 'study', *ROOMS['study'].point(332, 786),
                   display_position=ROOMS['study'].point(285, 782)),
-        WorldItem('protein', 'foyer', *ROOMS['foyer'].point(306, 309)),
         WorldItem('coffee', 'banquet', *ROOMS['banquet'].point(994, 270),
                   display_position=ROOMS['banquet'].point(993, 217)),
     ]
