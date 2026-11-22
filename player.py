@@ -4,7 +4,8 @@ from pico2d import SDL_KEYDOWN, SDL_KEYUP
 from sdl2 import (SDLK_w, SDLK_a, SDLK_s, SDLK_d, SDLK_UP,
                   SDLK_DOWN, SDLK_LEFT, SDLK_RIGHT)
 from rooms import FOYER_START
-from sprite import SpriteAnimator, ASSETS, image_for
+from sprite import SpriteAnimator
+from item import item_image
 
 MOVE = {'up': (SDLK_w, SDLK_UP), 'down': (SDLK_s, SDLK_DOWN),
         'left': (SDLK_a, SDLK_LEFT), 'right': (SDLK_d, SDLK_RIGHT)}
@@ -51,7 +52,7 @@ class Player:
     def draw(self):
         self.sprite.draw(self.x, self.y, 52, 74)
         if self.held_item:
-            image_for(ASSETS / 'items' / f'{self.held_item}.png').draw(self.x + 26, self.y + 35, 29, 29)
+            item_image(self.held_item).draw(self.x + 26, self.y + 35, 29, 29)
 
     def pickup(self, item_name):
         if self.held_item is not None:

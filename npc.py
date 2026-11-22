@@ -13,6 +13,7 @@ class NPC:
         self.sprite = SpriteAnimator(character, fps=6)
         self.working = True
         self.visible = True
+        self.sleeping = False
         self.move_to_room(room, path)
 
     def move_to_room(self, room, path):
@@ -53,4 +54,5 @@ class NPC:
 
     def draw(self):
         self.sprite.draw(self.x, self.y, 52, 74)
-        text(int(self.x - 52), int(self.y + 86), self.display_name, 14, (253, 249, 239))
+        name = self.display_name + (' · 수면 중 Zzz' if self.sleeping else '')
+        text(int(self.x - 52), int(self.y + 86), name, 14, (253, 249, 239))

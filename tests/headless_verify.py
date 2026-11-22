@@ -308,3 +308,55 @@ assert play_mode.investigation.charges == 0
 assert not play_mode.investigation.notes
 assert all(f.visible for f in play_mode.investigation.files)
 print('PASS: files, consumption, frozen reconstruction, notebook, all evidence and reset')
+
+# Combining works in either order and consumes each ingredient once.
+for first_index, second_index in ((3, 1), (1, 3)):
+    game_framework.change_mode(play_mode)
+    actor = play_mode.player
+    first, second = play_mode.items[first_index], play_mode.items[second_index]
+    for ingredient in (first, second):
+        play_mode.stage.current_room = ingredient.room
+        actor.x, actor.y = ingredient.x, ingredient.y
+        assert play_mode._nearest_interactable() is ingredient
+        press(sdl.SDLK_e)
+    assert actor.held_item == 'sleeping_coffee'
+    assert not first.visible and not second.visible
+    actor.draw()
+    press(sdl.SDLK_q)
+    dropped = play_mode.items[-1]
+    assert actor.held_item is None and dropped.item_name == 'sleeping_coffee'
+    dropped.draw()
+    press(sdl.SDLK_e)
+    assert actor.held_item == 'sleeping_coffee' and not dropped.visible
+    guard = play_mode.npcs[1]
+    play_mode.stage.current_room = guard.room
+    actor.x, actor.y = guard.x, guard.y
+    press(sdl.SDLK_e)
+    assert guard.sleeping and guard.visible and not guard.working
+    assert play_mode.stage.athlete_unavailable and actor.held_item is None
+    assert not guard.can_see(actor)
+    guard.draw()
+    actor.pickup('knife')
+    press(sdl.SDLK_e)
+    assert actor.held_item == 'knife'
+    # Other preparations still gate the existing robbery outcome.
+    play_mode.stage.security_disabled = True
+    play_mode.stage.photographer_busy = True
+    owner = play_mode.npcs[0]
+    play_mode.stage.current_room = owner.room
+    actor.x, actor.y = owner.x, owner.y
+    press(sdl.SDLK_e)
+    assert play_mode.stage.safe_open and play_mode.stage.robbery_triggered
+
+# Neither ingredient alone nor protein disables the athlete.
+for item in ('protein', 'sleeping_pills', 'coffee'):
+    game_framework.change_mode(play_mode)
+    actor = play_mode.player
+    guard = play_mode.npcs[1]
+    actor.pickup(item)
+    play_mode.stage.current_room = guard.room
+    actor.x, actor.y = guard.x, guard.y
+    press(sdl.SDLK_e)
+    assert actor.held_item == item and guard.working
+    assert not guard.sleeping and not play_mode.stage.athlete_unavailable
+print('PASS: both ingredient orders, drop/recovery, sleep, robbery and invalid gifts')

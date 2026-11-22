@@ -4,8 +4,13 @@ from ui import text
 
 ITEM_LABELS = {
     'knife': '주방칼', 'sleeping_pills': '수면제', 'protein': '프로틴',
-    'coffee': '커피', 'jewel': '보석',
+    'coffee': '커피', 'jewel': '보석', 'sleeping_coffee': '수면제가 든 커피',
 }
+
+
+def item_image(item_name):
+    image_name = 'coffee' if item_name == 'sleeping_coffee' else item_name
+    return image_for(ASSETS / 'items' / f'{image_name}.png')
 
 
 class WorldItem:
@@ -13,11 +18,13 @@ class WorldItem:
         self.item_name = item_name
         self.room = room
         self.x, self.y = x, y
-        self.image = image_for(ASSETS / 'items' / f'{item_name}.png')
+        self.image = item_image(item_name)
         self.visible = True
 
     def draw(self):
         self.image.draw(self.x, self.y + 12, 35, 35)
+        if self.item_name == 'sleeping_coffee':
+            text(int(self.x - 38), int(self.y + 43), '수면 커피', 14, (210, 186, 255))
 
 
 class FixedProp:

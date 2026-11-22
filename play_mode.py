@@ -95,27 +95,30 @@ def _interaction_hint(target):
         action = '협박' if target.character == 'owner' and player.held_item == 'knife' else '대화'
         return f'[E] {target.display_name} {action}'
     if isinstance(target, WorldItem):
+        if {player.held_item, target.item_name} == {'coffee', 'sleeping_pills'}:
+            return '[E] 커피와 수면제 조합'
         return f'[E] {ITEM_LABELS[target.item_name]} 줍기'
     return f'[E] {target.label} 조사'
 
 
 def _interact_npc(npc):
     if npc.character == 'athlete':
-        if player.held_item == 'protein':
+        if npc.sleeping:
+            _say('박준혁은 잠들어 있습니다. 순찰과 강도 개입을 할 수 없습니다.')
+        elif player.held_item == 'sleeping_coffee':
             player.drop()
+            npc.sleeping = True
             npc.working = False
-            npc.visible = False
             stage.athlete_unavailable = True
-            _say('박준혁: 프로틴 고맙다! 잠깐 자리 좀 비울게.')
+            _say('박준혁이 건넨 커피를 마신 뒤 잠들었습니다. 복도 감시가 멈췄습니다.', 9)
         elif player.held_item == 'sleeping_pills':
-            # Fictional, abstract state transition. No real-world administration details.
-            player.drop()
-            npc.working = False
-            npc.visible = False
-            stage.athlete_unavailable = True
-            _say('복도 휴식 이벤트 완료: 박준혁은 당분간 개입하지 않습니다.')
+            _say('박준혁: 약은 필요 없어. 잠이 쏟아지니 커피라도 마셔야겠어.')
+        elif player.held_item == 'coffee':
+            _say('박준혁은 커피를 한 모금 마시고 돌려줬습니다. 계속 복도를 지킵니다.')
+        elif player.held_item == 'protein':
+            _say('박준혁: 운동은 끝났어. 지금은 졸려서 커피가 필요해.')
         else:
-            _say('박준혁: 지금은 복도에 있을 거야. 주인에게 무슨 일이 생기면 바로 달려갈걸?')
+            _say('박준혁: 졸려도 주인 곁을 지켜야 해. 연회장에 커피가 있을 텐데.')
     elif npc.character == 'it_expert':
         stage.security_disabled = True
         _say('이도현: 시연 점검을 해볼게. 경보 시스템이 잠시 테스트 모드로 바뀌었다.')
@@ -175,7 +178,11 @@ def interact():
     elif isinstance(target, NPC):
         _interact_npc(target)
     elif isinstance(target, WorldItem):
-        if player.pickup(target.item_name):
+        if {player.held_item, target.item_name} == {'coffee', 'sleeping_pills'}:
+            player.held_item = 'sleeping_coffee'
+            target.visible = False
+            _say('커피와 수면제를 조합했습니다. 선수에게 가져가 보세요.', 8)
+        elif player.pickup(target.item_name):
             target.visible = False
             if target.item_name == 'jewel':
                 stage.jewel_taken = True
