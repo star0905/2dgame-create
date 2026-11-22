@@ -61,4 +61,3 @@ class Dialogue:
         for number, line in enumerate(lines):
             text(54, 245 - number * 33, line, 21, (250, 244, 232))
         text(54, 145, 'Enter / Space / E 다음', 16, (209, 194, 176))
-        text(799, 145, f'{self.index + 1} / {len(self.pages)}', 16)
