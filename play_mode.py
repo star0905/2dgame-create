@@ -143,7 +143,9 @@ def _interact_npc(npc):
         stage.photographer_busy = True
         npc.move_to_room('study', [(156, 739), (158, 758)])
         npc.working = True
-        _say('정수빈: 단체 사진 촬영? 좋아. 지금부터 다른 곳을 촬영하고 있을게.')
+        _speak((('주인공', '아까부터 카메라가 이상해 보이는데, 확인해 보는 게 어때?'),
+                ('정수빈 (사진작가)', '초점이 자꾸 어긋나네. 서재에서 장비를 좀 살펴볼게.'),
+                ('상황', '정수빈은 촬영을 멈추고 서재로 향했다.')))
     elif npc.character == 'planner':
         _say('한지우: 저택 완공을 기념한 날짜는 11월 25일이야. 금고 번호도 그날에 맞췄다고 하더라.')
     elif npc.character == 'chef':

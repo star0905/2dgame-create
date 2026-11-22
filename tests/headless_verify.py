@@ -276,7 +276,10 @@ def press(key):
 press(sdl.SDLK_e)
 assert case.charges == 1 and not packet.visible
 press(ord('h'))
-assert not case.active and case.charges == 1
+assert case.active and case.charges == 0
+press(ord('h'))
+assert not case.active
+case.charges = 1
 play_mode.stage.current_room = 'banquet'
 play_mode.player.x, play_mode.player.y = ROOMS['banquet'].point(765, 425)
 press(ord('h'))
@@ -318,7 +321,7 @@ for room_name, (_, point, _) in EVIDENCE.items():
     assert play_mode.stage.can_move(*ROOMS[room_name].point(*point)), room_name
     case.x, case.y = ROOMS[room_name].point(*point)
     case.inspect(room_name)
-assert len(case.notes) == 3
+assert set(case.notes) == set(ROOMS)
 game_framework.change_mode(play_mode)
 play_mode.dialogue.pages = []
 assert play_mode.investigation.charges == 0
@@ -426,17 +429,47 @@ for index in (0, 1, 2):
     assert play_mode.stage.can_move(obj.x, obj.y)
     play_mode.player.x, play_mode.player.y = obj.x, obj.y
     assert play_mode._nearest_interactable() is obj
-assert len(EVIDENCE) == 3
-case = play_mode.investigation
-for room_name in ('foyer', 'kitchen', 'study'):
+assert set(EVIDENCE) == set(ROOMS)
+from investigation import Investigation
+for room_name, (_, point, _) in EVIDENCE.items():
+    case = Investigation()
+    play_mode.investigation = case
+    play_mode.stage.current_room = room_name
+    play_mode.player.x, play_mode.player.y = ROOMS[room_name].point(*point)
+    # No free first inspection; every room follows the same resource rule.
+    press(ord('h'))
+    assert not case.active and case.charges == 0
     case.charges = 1
-    case.open_scene(room_name, play_mode.player)
-    assert not case.active and case.charges == 1
+    press(ord('h'))
+    assert case.active and case.charges == 0
+    press(sdl.SDLK_e)
+    assert room_name in case.notes
+    play_mode.draw()
+    press(ord('n'))
+    assert case.notebook
+    play_mode.draw()
+    press(sdl.SDLK_ESCAPE)
+    press(ord('h'))
+    assert not case.active
+    press(ord('h'))
+    assert case.active and case.charges == 0
+    press(ord('h'))
+# Photographer checks equipment instead of taking pictures in another room.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+photographer = play_mode.npcs[4]
+play_mode.stage.current_room = photographer.room
+play_mode.player.x, play_mode.player.y = photographer.x, photographer.y
+press(sdl.SDLK_e)
+assert photographer.room == 'study' and play_mode.stage.photographer_busy
+assert play_mode.dialogue.active
+assert any('장비' in ' '.join(lines) for _, lines in play_mode.dialogue.pages)
+play_mode.dialogue.pages = []
 # The table itself blocks, the new south/north approach lanes stay open.
 play_mode.stage.current_room = 'banquet'
 for point in ((770, 220), (770, 427), (585, 298), (992, 298)):
     assert play_mode.stage.can_move(*ROOMS['banquet'].point(*point)), point
-print('PASS: study expert, surface pickup points, three clues and dining lanes')
+print('PASS: study expert, surface pickup points, six room clues, charge/revisit rules, equipment dialogue and dining lanes')
 
 assert not any(obj.room == 'foyer' for obj in play_mode.items)
 print('PASS: no loose item bottles in the foyer')
