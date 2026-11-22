@@ -14,15 +14,17 @@ def item_image(item_name):
 
 
 class WorldItem:
-    def __init__(self, item_name, room, x, y):
+    def __init__(self, item_name, room, x, y, display_position=None):
         self.item_name = item_name
         self.room = room
         self.x, self.y = x, y
+        self.display_position = display_position
         self.image = item_image(item_name)
         self.visible = True
 
     def draw(self):
-        self.image.draw(self.x, self.y + 12, 35, 35)
+        x, y = self.display_position or (self.x, self.y + 12)
+        self.image.draw(x, y, 35, 35)
         if self.item_name == 'sleeping_coffee':
             text(int(self.x - 38), int(self.y + 43), '수면 커피', 14, (210, 186, 255))
 

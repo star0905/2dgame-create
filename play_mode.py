@@ -35,21 +35,24 @@ def init():
     npcs = [
         NPC('owner', '김재현 (부자)', 'banquet', [(547, 200), (549, 212)], 24),
         NPC('athlete', '박준혁 (태권도 선수)', 'hall', [(752, 870), (764, 881)], 32),
-        NPC('it_expert', '이도현 (보안 전문가)', 'vault', [(1174, 760), (1174, 789)], 30),
+        NPC('it_expert', '이도현 (보안 전문가)', 'study', [(350, 790), (359, 817)], 30),
         NPC('chef', '서유진 (요리사)', 'kitchen', [(1360, 244), (1391, 251)], 30),
         NPC('photographer', '정수빈 (사진작가)', 'banquet', [(907, 195), (912, 211)], 28),
         NPC('planner', '한지우 (파티 총무)', 'study', [(348, 718), (359, 743)], 26),
     ]
     items = [
-        WorldItem('knife', 'kitchen', *ROOMS['kitchen'].point(1357, 312)),
-        WorldItem('sleeping_pills', 'study', *ROOMS['study'].point(151, 808)),
+        WorldItem('knife', 'kitchen', *ROOMS['kitchen'].point(1260, 372),
+                  display_position=ROOMS['kitchen'].point(1260, 313)),
+        WorldItem('sleeping_pills', 'study', *ROOMS['study'].point(332, 786),
+                  display_position=ROOMS['study'].point(285, 782)),
         WorldItem('protein', 'foyer', *ROOMS['foyer'].point(306, 309)),
-        WorldItem('coffee', 'banquet', *ROOMS['banquet'].point(928, 211)),
+        WorldItem('coffee', 'banquet', *ROOMS['banquet'].point(994, 270),
+                  display_position=ROOMS['banquet'].point(993, 217)),
     ]
     props = [
         FixedProp('safe', 'vault', *ROOMS['vault'].point(1231, 734), '금고'),
         FixedProp('alarm', 'vault', *ROOMS['vault'].point(1419, 764), '경보 장치'),
-        FixedProp('cake', 'banquet', *ROOMS['banquet'].point(919, 378), '케이크'),
+        FixedProp('cake', 'banquet', *ROOMS['banquet'].point(910, 300), '케이크'),
     ]
     for obj in npcs + [player]:
         game_world.add_object(obj, 1)
@@ -175,7 +178,7 @@ def _interact_prop(prop):
             player.keys.clear()
             _say('금고 비밀번호 4자리를 입력하고 Enter를 누르세요. 단서는 저택 안에 있습니다.')
     elif prop.name == 'alarm':
-        _say('전자 보안 장치: 보안 전문가에게 시스템에 대해 물어볼 수 있을 것 같다.')
+        _say('전자 보안 장치: 서재의 보안 전문가에게 시스템에 대해 물어보자.')
     elif prop.name == 'cake':
         _say('생일 케이크가 준비되어 있다. 손님들이 거실에 모이는 시기를 알 수 있다.')
 
@@ -187,8 +190,8 @@ def interact():
         return
     if isinstance(target, CaseFile):
         target.visible = False
-        investigation.charges += 2
-        _say('현장 조사 자료 2개 획득. 원하는 방에서 [H]로 사용하세요.', 9)
+        investigation.charges += 1
+        _say('현장 조사 자료 1개 획득. 원하는 방에서 [H]로 사용하세요.', 9)
     elif isinstance(target, NPC):
         _interact_npc(target)
     elif isinstance(target, WorldItem):

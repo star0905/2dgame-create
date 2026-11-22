@@ -8,21 +8,9 @@ from ui import text
 
 # Coordinates are in the original mansion sheet, like rooms.py.
 EVIDENCE = {
-    'foyer': ('출입 기록', (233, 315), (
-        '현관의 출입 기록에는 보석 도난 직후 밖으로 나간 손님이 남아 있다.',
-        '보석을 확보한 범인은 이 현관으로 돌아와 저택을 떠났을 것이다.',
-    )),
     'banquet': ('촬영 기록', (900, 440), (
         '파티 사진의 촬영 방향이 도중에 바뀌었다.',
         '사진작가에게 다른 장소에서 촬영하도록 부탁했을 가능성이 있다.',
-    )),
-    'kitchen': ('비어 있는 칼자리', (1357, 312), (
-        '식기 정리 기록에 주방칼 한 자루가 늦게 돌아왔다고 적혀 있다.',
-        '누군가 칼을 들고 주인에게 접근했다면 금고를 열게 할 수 있었을까?',
-    )),
-    'study': ('기념일 메모', (289, 735), (
-        '주인이 금고 번호를 저택 완공일에 맞췄다는 메모가 남아 있다.',
-        '파티 총무라면 그 날짜를 알고 있을지도 모른다.',
     )),
     'hall': ('선수 옆의 빈 커피잔', (750, 830), (
         '선수는 음료를 마신 뒤 갑자기 졸렸다고 증언했다.',
@@ -30,14 +18,13 @@ EVIDENCE = {
     )),
     'vault': ('보안 점검 기록', (1325, 785), (
         '범행 무렵 경보가 점검 모드로 전환된 기록이 있다.',
-        '보안 전문가에게 장치 관리 상태와 점검에 대해 물어보자.',
+        '서재의 보안 전문가에게 장치 관리 상태와 점검에 대해 물어보자.',
     )),
 }
 
 
 EVIDENCE_ICONS = {
-    'foyer': 'magnifier', 'banquet': 'camera', 'kitchen': 'knife',
-    'study': 'magnifier', 'hall': 'coffee', 'vault': 'alarm',
+    'banquet': 'camera', 'hall': 'coffee', 'vault': 'alarm',
 }
 
 
@@ -52,7 +39,7 @@ class CaseFile:
         draw_rectangle(x - 13, y, x + 13, y + 24, 232, 216, 170, filled=True)
         for offset in (7, 13, 19):
             draw_rectangle(x - 8, y + offset, x + 7, y + offset, 89, 76, 58)
-        text(x - 25, y + 43, '자료 ×2', 14, (255, 231, 160))
+        text(x - 25, y + 43, '자료 ×1', 14, (255, 231, 160))
 
 
 class Investigation:
@@ -72,6 +59,8 @@ class Investigation:
         self.x = self.y = 0.0
 
     def open_scene(self, room_name, player):
+        if room_name not in EVIDENCE:
+            return '이 방에는 현장 조사 단서가 없습니다. 연회장·복도·금고실에서 사용하세요.'
         if room_name not in self.unlocked:
             if self.charges == 0:
                 return '현장 조사 자료가 필요합니다. 종이 묶음을 [E]로 주워 보세요.'

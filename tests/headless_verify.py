@@ -206,7 +206,7 @@ print('PASS: withdrawal ending, retry, and jewel exit')
 
 # Distinguish walkable floor near furniture from the solid footprints.
 for room_name, walkable, solid in (
-    ('banquet', ((765, 289), (615, 405)), ((765, 330), (765, 402))),
+    ('banquet', ((765, 225), (615, 405)), ((765, 316), (765, 373))),
     ('vault', ((1402, 843), (1368, 740)), ((1402, 887), (1445, 882), (1406, 737))),
     ('kitchen', ((1180, 402), (1265, 293)), ((1178, 449), (1265, 337))),
     ('study', ((214, 735), (289, 735)), ((250, 737), (250, 788))),
@@ -229,6 +229,9 @@ game_framework.change_mode(play_mode)
 play_mode.dialogue.pages = []
 play_mode.stage.current_room = 'vault'
 guard = play_mode.npcs[2]
+# A controlled observer in the restricted room tests the cooldown independently
+# of the expert's production placement in the study.
+guard.move_to_room('vault', [(1174, 760)])
 assert play_mode.stage.can_move(guard.x, guard.y)
 play_mode.player.x, play_mode.player.y = guard.x, guard.y - 40
 visible_to_guard = True
@@ -270,9 +273,13 @@ def press(key):
     play_mode.get_events = lambda: [SimpleNamespace(type=lib.SDL_KEYDOWN, key=key)]
     play_mode.handle_events()
 press(sdl.SDLK_e)
-assert case.charges == 2 and not packet.visible
+assert case.charges == 1 and not packet.visible
 press(ord('h'))
-assert case.active and case.charges == 1
+assert not case.active and case.charges == 1
+play_mode.stage.current_room = 'banquet'
+play_mode.player.x, play_mode.player.y = ROOMS['banquet'].point(765, 425)
+press(ord('h'))
+assert case.active and case.charges == 0
 position = play_mode.player.x, play_mode.player.y
 npc_positions = [(n.x, n.y) for n in play_mode.npcs]
 play_mode.stage.invulnerability_timer = 1.5
@@ -282,9 +289,9 @@ assert (play_mode.player.x, play_mode.player.y) == position
 assert [(n.x, n.y) for n in play_mode.npcs] == npc_positions
 assert play_mode.stage.invulnerability_timer == 1.5
 assert play_mode.player.held_item == 'knife'
-case.x, case.y = ROOMS['foyer'].point(*EVIDENCE['foyer'][1])
+case.x, case.y = ROOMS['banquet'].point(*EVIDENCE['banquet'][1])
 press(sdl.SDLK_e)
-assert 'foyer' in case.notes
+assert 'banquet' in case.notes
 play_mode.draw()
 press(ord('n'))
 assert case.notebook
@@ -295,14 +302,13 @@ press(ord('h'))
 assert not case.active
 assert not play_mode.player.keys
 press(ord('h'))
-assert case.charges == 1
+assert case.charges == 0
 press(ord('h'))
 # Unlock another room and inspect every evidence marker at reachable coordinates.
 play_mode.stage.current_room = 'hall'
 play_mode.player.x, play_mode.player.y = ROOMS['hall'].point(750, 800)
 press(ord('h'))
-assert case.charges == 0 and case.active
-press(ord('h'))
+assert case.charges == 0 and not case.active
 play_mode.stage.current_room = 'vault'
 press(ord('h'))
 assert not case.active and case.charges == 0
@@ -311,7 +317,7 @@ for room_name, (_, point, _) in EVIDENCE.items():
     assert play_mode.stage.can_move(*ROOMS[room_name].point(*point)), room_name
     case.x, case.y = ROOMS[room_name].point(*point)
     case.inspect(room_name)
-assert len(case.notes) == 6
+assert len(case.notes) == 3
 game_framework.change_mode(play_mode)
 play_mode.dialogue.pages = []
 assert play_mode.investigation.charges == 0
@@ -404,3 +410,29 @@ play_mode.handle_events()
 assert play_mode.player.held_item == 'coffee'
 assert play_mode.dialogue.active
 print('PASS: greeting, paused dialogue, expert script and coffee refill')
+
+# Surface items have accessible pickup spots distinct from their display spots.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+expert = play_mode.npcs[2]
+assert expert.room == 'study'
+play_mode.stage.current_room = 'study'
+assert all(play_mode.stage.can_move(*point) for point in expert.path)
+for index in (0, 1, 3):
+    obj = play_mode.items[index]
+    play_mode.stage.current_room = obj.room
+    assert obj.display_position is not None
+    assert play_mode.stage.can_move(obj.x, obj.y)
+    play_mode.player.x, play_mode.player.y = obj.x, obj.y
+    assert play_mode._nearest_interactable() is obj
+assert len(EVIDENCE) == 3
+case = play_mode.investigation
+for room_name in ('foyer', 'kitchen', 'study'):
+    case.charges = 1
+    case.open_scene(room_name, play_mode.player)
+    assert not case.active and case.charges == 1
+# The table itself blocks, the new south/north approach lanes stay open.
+play_mode.stage.current_room = 'banquet'
+for point in ((770, 220), (770, 427), (585, 298), (992, 298)):
+    assert play_mode.stage.can_move(*ROOMS['banquet'].point(*point)), point
+print('PASS: study expert, surface pickup points, three clues and dining lanes')

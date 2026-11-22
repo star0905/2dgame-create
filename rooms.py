@@ -128,6 +128,34 @@ ROOMS = {
 }
 
 
+# The same transform is used for the banquet art and all its dining furniture.
+DINING_AREA = (560, 220, 980, 424)
+DINING_SCALE = 0.78
+DINING_CENTER = (770, 320)
+DINING_OFFSET_Y = -12
+
+
+def dining_point(x, y):
+    cx, cy = DINING_CENTER
+    return (cx + (x - cx) * DINING_SCALE,
+            cy + (y - cy) * DINING_SCALE + DINING_OFFSET_Y)
+
+
+banquet = ROOMS['banquet']
+dining = list(banquet.furniture[6:19])
+# Include the tabletop as a solid surface so walking behind the table cannot
+# look like walking over the upper half of the table.
+dining[0] = (609, 273, 930, 364, 6)
+resized_dining = []
+for left, top, right, bottom, corner in dining:
+    x0, y0 = dining_point(left, top)
+    x1, y1 = dining_point(right, bottom)
+    resized_dining.append((x0, y0, x1, y1, corner * DINING_SCALE))
+ROOMS['banquet'] = Room(banquet.label, banquet.crop, banquet.floor,
+                       banquet.furniture[:6] + tuple(resized_dining) + banquet.furniture[19:],
+                       banquet.doors)
+
+
 class MansionMap:
     def __init__(self, stage):
         self.stage = stage
@@ -137,5 +165,37 @@ class MansionMap:
 
     def draw(self):
         name = self.stage.current_room
+        room = ROOMS[name]
         image = image_for(ASSETS / 'rooms' / f'{name}.png')
-        image.draw(SCREEN_W / 2, VIEW_Y, *ROOMS[name].size)
+        image.draw(SCREEN_W / 2, VIEW_Y, *room.size)
+        if name == 'banquet':
+            self.draw_dining_area(image, room)
+
+    def draw_dining_area(self, image, room):
+        left, top, right, bottom = DINING_AREA
+        ox, oy, _, image_bottom = room.crop
+        # Cover the old dining area with a clean parquet patch from the same
+        # room. Draw slightly overlapping tiles to avoid sampling seams.
+        for y in range(top, bottom, 40):
+            for x in range(left, right, 40):
+                width = min(40, right - x)
+                height = min(40, bottom - y)
+                sx, sy = room.point(x + width / 2, y + height / 2)
+                image.clip_draw(475 - ox, image_bottom - 300, width, height,
+                                sx, sy, width * room.scale + 1, height * room.scale + 1)
+        x0, y0 = dining_point(left, top)
+        x1, y1 = dining_point(right, bottom)
+        sx, sy = room.point((x0 + x1) / 2, (y0 + y1) / 2)
+        image.clip_draw(left - ox, image_bottom - bottom, right - left, bottom - top,
+                        sx, sy, (x1 - x0) * room.scale, (y1 - y0) * room.scale)
+
+        # The source crop touches the service trolley. Remove that fragment
+        # from the scaled crop, then restore the full trolley at its old spot.
+        ax, ay = dining_point(962, 220)
+        bx, by = dining_point(980, 256)
+        sx, sy = room.point((ax + bx) / 2, (ay + by) / 2)
+        image.clip_draw(475 - ox, image_bottom - 300, 20, 40, sx, sy,
+                        (bx - ax) * room.scale + 1, (by - ay) * room.scale + 1)
+        sx, sy = room.point(991, 229)
+        image.clip_draw(960 - ox, image_bottom - 258, 62, 58,
+                        sx, sy, 62 * room.scale, 58 * room.scale)
