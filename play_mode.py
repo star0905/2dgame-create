@@ -1,6 +1,8 @@
 """Mansion case with a fixed camera for each room."""
 from math import hypot
 from investigation import Investigation, CaseFile
+from dialogue import (Dialogue, WELCOME, ATHLETE_REQUEST, ATHLETE_DRINK,
+                      ATHLETE_SLEEP, ATHLETE_TESTIMONY, SECURITY)
 from pico2d import clear_canvas, update_canvas, get_events, draw_rectangle, SDL_KEYDOWN, SDL_QUIT
 from sdl2 import (SDLK_ESCAPE, SDLK_e, SDLK_q, SDLK_SPACE, SDLK_RETURN, SDLK_BACKSPACE,
                   SDLK_LEFT, SDLK_RIGHT, SDLK_UP, SDLK_DOWN)
@@ -22,8 +24,10 @@ FACING_VECTORS = {'up': (0, 1), 'down': (0, -1), 'left': (-1, 0), 'right': (1, 0
 
 def init():
     global stage, player, npcs, items, props, message, input_code_mode, entered_code, msg_timer
-    global notice_text, notice_timer, investigation
+    global notice_text, notice_timer, investigation, dialogue
     investigation = Investigation()
+    dialogue = Dialogue()
+    dialogue.start(WELCOME)
     game_world.clear()
     stage = Stage()
     game_world.add_object(MansionMap(stage), 0)
@@ -31,7 +35,7 @@ def init():
     npcs = [
         NPC('owner', '김재현 (부자)', 'banquet', [(547, 200), (549, 212)], 24),
         NPC('athlete', '박준혁 (태권도 선수)', 'hall', [(752, 870), (764, 881)], 32),
-        NPC('it_expert', '이도현 (IT 전문가)', 'vault', [(1174, 760), (1174, 789)], 30),
+        NPC('it_expert', '이도현 (보안 전문가)', 'vault', [(1174, 760), (1174, 789)], 30),
         NPC('chef', '서유진 (요리사)', 'kitchen', [(1360, 244), (1391, 251)], 30),
         NPC('photographer', '정수빈 (사진작가)', 'banquet', [(907, 195), (912, 211)], 28),
         NPC('planner', '한지우 (파티 총무)', 'study', [(348, 718), (359, 743)], 26),
@@ -64,6 +68,11 @@ def finish():
 def _say(value, seconds=6):
     global message, msg_timer
     message, msg_timer = value, seconds
+
+
+def _speak(lines):
+    player.keys.clear()
+    dialogue.start(lines)
 
 
 def _end(won, reason, *, abandoned=False):
@@ -104,24 +113,25 @@ def _interaction_hint(target):
 def _interact_npc(npc):
     if npc.character == 'athlete':
         if npc.sleeping:
-            _say('박준혁은 잠들어 있습니다. 순찰과 강도 개입을 할 수 없습니다.')
+            _speak((('상황', '박준혁은 잠들어 있다. 말을 걸어도 대답하지 않는다.'),))
         elif player.held_item == 'sleeping_coffee':
             player.drop()
             npc.sleeping = True
             npc.working = False
             stage.athlete_unavailable = True
-            _say('박준혁이 건넨 커피를 마신 뒤 잠들었습니다. 복도 감시가 멈췄습니다.', 9)
+            _speak(ATHLETE_SLEEP)
         elif player.held_item == 'sleeping_pills':
-            _say('박준혁: 약은 필요 없어. 잠이 쏟아지니 커피라도 마셔야겠어.')
+            _speak((('박준혁 (운동선수)', '약은 필요 없어. 마실 거 있으면 좀 부탁할게.'),))
         elif player.held_item == 'coffee':
-            _say('박준혁은 커피를 한 모금 마시고 돌려줬습니다. 계속 복도를 지킵니다.')
+            player.drop()
+            _speak(ATHLETE_DRINK + (('상황', '박준혁은 커피를 마시고 다시 복도를 지킨다.'),))
         elif player.held_item == 'protein':
-            _say('박준혁: 운동은 끝났어. 지금은 졸려서 커피가 필요해.')
+            _speak((('박준혁 (운동선수)', '프로틴은 괜찮아. 지금은 마실 게 좀 필요해.'),))
         else:
-            _say('박준혁: 졸려도 주인 곁을 지켜야 해. 연회장에 커피가 있을 텐데.')
+            _speak(ATHLETE_REQUEST)
     elif npc.character == 'it_expert':
         stage.security_disabled = True
-        _say('이도현: 시연 점검을 해볼게. 경보 시스템이 잠시 테스트 모드로 바뀌었다.')
+        _speak(SECURITY)
     elif npc.character == 'photographer':
         stage.photographer_busy = True
         npc.move_to_room('study', [(156, 739), (158, 758)])
@@ -130,7 +140,11 @@ def _interact_npc(npc):
     elif npc.character == 'planner':
         _say('한지우: 저택 완공을 기념한 날짜는 11월 25일이야. 금고 번호도 그날에 맞췄다고 하더라.')
     elif npc.character == 'chef':
-        _say('서유진: 필요한 음식은 거실에 있습니다. 주방 기구는 제자리에 두세요.')
+        if player.held_item is None:
+            player.pickup('coffee')
+            _speak((('서유진 (요리사)', '커피 한 잔 준비해 드릴게요. 더 필요하면 다시 말씀하세요.'),))
+        else:
+            _speak((('서유진 (요리사)', '커피가 필요하시면 손을 비우고 말씀해 주세요. 주방 기구는 제자리에 두세요.'),))
     elif npc.character == 'owner':
         if player.held_item == 'knife':
             # The threat is a separate game event, not a regular suspicion trigger.
@@ -161,7 +175,7 @@ def _interact_prop(prop):
             player.keys.clear()
             _say('금고 비밀번호 4자리를 입력하고 Enter를 누르세요. 단서는 저택 안에 있습니다.')
     elif prop.name == 'alarm':
-        _say('전자 보안 장치: IT 전문가에게 시스템에 대해 물어볼 수 있을 것 같다.')
+        _say('전자 보안 장치: 보안 전문가에게 시스템에 대해 물어볼 수 있을 것 같다.')
     elif prop.name == 'cake':
         _say('생일 케이크가 준비되어 있다. 손님들이 거실에 모이는 시기를 알 수 있다.')
 
@@ -219,6 +233,11 @@ def handle_events():
         if event.type == SDL_QUIT:
             game_framework.quit_game()
             return
+        if dialogue.active:
+            if event.type == SDL_KEYDOWN and event.key in (SDLK_RETURN, SDLK_SPACE, SDLK_e):
+                dialogue.advance()
+                player.keys.clear()
+            continue
         if investigation.notebook:
             if event.type == SDL_KEYDOWN:
                 if event.key in (ord('n'), SDLK_ESCAPE):
@@ -238,7 +257,10 @@ def handle_events():
                     investigation.notebook = True
                     player.keys.clear()
                 elif event.key == SDLK_e:
-                    _say(investigation.inspect(stage.current_room), 8)
+                    response = investigation.inspect(stage.current_room)
+                    _say(response, 8)
+                    if stage.current_room == 'hall' and response.startswith('흔적을 수첩'):
+                        _speak(ATHLETE_TESTIMONY)
             continue
         if input_code_mode:
             _handle_safe_input(event)
@@ -269,6 +291,8 @@ def handle_events():
 def update():
     global msg_timer, notice_text, notice_timer
     dt = game_framework.frame_time
+    if dialogue.active:
+        return
     if investigation.notebook:
         return
     if investigation.active:
@@ -363,4 +387,6 @@ def draw():
         text(285, 384, '금고 비밀번호', 25, (255, 239, 182))
         text(285, 342, ' '.join(entered_code.ljust(4, '_')), 27)
         text(285, 290, '숫자 입력     Enter 확인     Esc 취소', 17)
+    if dialogue.active:
+        dialogue.draw()
     update_canvas()

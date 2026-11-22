@@ -92,6 +92,7 @@ assert stage.robbery_outcome()[0]==True and stage.safe_open
 title_mode.init()
 title_mode.draw()
 play_mode.init()
+play_mode.dialogue.pages = []
 assert len(play_mode.npcs)==6
 assert play_mode.stage.current_room == 'foyer'
 for name, room in ROOMS.items():
@@ -136,6 +137,7 @@ assert not stage.can_move(*study.point(250, 786))
 from types import SimpleNamespace
 
 play_mode.init()
+play_mode.dialogue.pages = []
 player = play_mode.player
 protein = play_mode.items[2]
 player.x, player.y = protein.x - 65, protein.y
@@ -156,6 +158,7 @@ play_mode.handle_events()
 assert play_mode.input_code_mode
 
 play_mode.init()
+play_mode.dialogue.pages = []
 play_mode.stage.current_room = 'banquet'
 npc = play_mode.npcs[0]
 coffee = play_mode.items[3]
@@ -174,6 +177,7 @@ import game_framework
 import result_mode
 
 game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
 play_mode.player.keys.add(sdl.SDLK_s)
 for _ in range(60):
     if game_framework.current_mode is result_mode:
@@ -187,6 +191,7 @@ result_mode.draw()
 # Retry starts a fresh game, and exiting with a jewel still wins.
 result_mode.get_events = lambda: [SimpleNamespace(type=lib.SDL_KEYDOWN, key=sdl.SDLK_r)]
 result_mode.handle_events()
+play_mode.dialogue.pages = []
 assert game_framework.current_mode is play_mode and play_mode.stage.current_room == 'foyer'
 assert play_mode.player.pickup('jewel')
 play_mode.stage.jewel_taken = True
@@ -221,6 +226,7 @@ print('PASS: furniture footprints, open floor, and corridor wall')
 
 # Cooldown ticks through the play loop and the same NPC can notice again.
 game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
 play_mode.stage.current_room = 'vault'
 guard = play_mode.npcs[2]
 assert play_mode.stage.can_move(guard.x, guard.y)
@@ -253,11 +259,14 @@ print('PASS: repeated witnessing, breaking line of sight, alarm bypass and jewel
 # a charge once per room, freeze the reconstruction, and preserve its state.
 from investigation import EVIDENCE
 game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
 case = play_mode.investigation
 assert play_mode.player.pickup('knife')
 packet = case.files[0]
 play_mode.player.x, play_mode.player.y = packet.x, packet.y
 def press(key):
+    while play_mode.dialogue.active:
+        play_mode.dialogue.advance()
     play_mode.get_events = lambda: [SimpleNamespace(type=lib.SDL_KEYDOWN, key=key)]
     play_mode.handle_events()
 press(sdl.SDLK_e)
@@ -304,6 +313,7 @@ for room_name, (_, point, _) in EVIDENCE.items():
     case.inspect(room_name)
 assert len(case.notes) == 6
 game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
 assert play_mode.investigation.charges == 0
 assert not play_mode.investigation.notes
 assert all(f.visible for f in play_mode.investigation.files)
@@ -312,6 +322,7 @@ print('PASS: files, consumption, frozen reconstruction, notebook, all evidence a
 # Combining works in either order and consumes each ingredient once.
 for first_index, second_index in ((3, 1), (1, 3)):
     game_framework.change_mode(play_mode)
+    play_mode.dialogue.pages = []
     actor = play_mode.player
     first, second = play_mode.items[first_index], play_mode.items[second_index]
     for ingredient in (first, second):
@@ -351,12 +362,45 @@ for first_index, second_index in ((3, 1), (1, 3)):
 # Neither ingredient alone nor protein disables the athlete.
 for item in ('protein', 'sleeping_pills', 'coffee'):
     game_framework.change_mode(play_mode)
+    play_mode.dialogue.pages = []
     actor = play_mode.player
     guard = play_mode.npcs[1]
     actor.pickup(item)
     play_mode.stage.current_room = guard.room
     actor.x, actor.y = guard.x, guard.y
     press(sdl.SDLK_e)
-    assert actor.held_item == item and guard.working
+    assert actor.held_item == (None if item == 'coffee' else item) and guard.working
     assert not guard.sleeping and not play_mode.stage.athlete_unavailable
 print('PASS: both ingredient orders, drop/recovery, sleep, robbery and invalid gifts')
+
+# Scripted scenes use explicit advancement and pause reconstruction updates.
+from dialogue import WELCOME, ATHLETE_SLEEP, ATHLETE_TESTIMONY, SECURITY
+game_framework.change_mode(play_mode)
+assert play_mode.dialogue.active
+assert play_mode.dialogue.pages[0][0] == '김재현 (집주인)'
+old = play_mode.player.x, play_mode.player.y
+play_mode.player.keys.add(sdl.SDLK_d)
+play_mode.update()
+assert (play_mode.player.x, play_mode.player.y) == old
+play_mode.draw()
+play_mode.get_events = lambda: [SimpleNamespace(type=lib.SDL_KEYDOWN, key=sdl.SDLK_RETURN)]
+while play_mode.dialogue.active:
+    play_mode.handle_events()
+assert not play_mode.player.keys
+# Directing E to the expert opens a speaker-labelled conversation.
+expert = play_mode.npcs[2]
+play_mode.stage.current_room = expert.room
+play_mode.player.x, play_mode.player.y = expert.x, expert.y
+play_mode.get_events = lambda: [SimpleNamespace(type=lib.SDL_KEYDOWN, key=sdl.SDLK_e)]
+play_mode.handle_events()
+assert play_mode.dialogue.active and play_mode.stage.security_disabled
+assert any('밖에' in ' '.join(lines) for _, lines in play_mode.dialogue.pages)
+play_mode.dialogue.pages = []
+# Coffee remains obtainable even if the ordinary serving has been consumed.
+chef = play_mode.npcs[3]
+play_mode.stage.current_room = chef.room
+play_mode.player.x, play_mode.player.y = chef.x, chef.y
+play_mode.handle_events()
+assert play_mode.player.held_item == 'coffee'
+assert play_mode.dialogue.active
+print('PASS: greeting, paused dialogue, expert script and coffee refill')
