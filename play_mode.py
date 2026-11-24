@@ -2,6 +2,7 @@
 from math import hypot
 from investigation import Investigation, CaseFile
 from pursuit import Pursuit
+from surveillance import Surveillance
 from dialogue import (Dialogue, WELCOME, ATHLETE_REQUEST, ATHLETE_DRINK,
                       ATHLETE_SLEEP, ATHLETE_TESTIMONY, SECURITY)
 from pico2d import clear_canvas, update_canvas, get_events, draw_rectangle, SDL_KEYDOWN, SDL_QUIT
@@ -26,9 +27,10 @@ FACING_VECTORS = {'up': (0, 1), 'down': (0, -1), 'left': (-1, 0), 'right': (1, 0
 
 def init():
     global stage, player, npcs, items, props, message, input_code_mode, entered_code, msg_timer
-    global notice_text, notice_timer, investigation, dialogue, pursuit
+    global notice_text, notice_timer, investigation, dialogue, pursuit, surveillance
     investigation = Investigation()
     pursuit = Pursuit()
+    surveillance = Surveillance()
     dialogue = Dialogue()
     dialogue.start(WELCOME)
     game_world.clear()
@@ -38,12 +40,17 @@ def init():
     player = Player(stage)
     npcs = [
         NPC('owner', '김재현 (부자)', 'vault', [(1330, 805), (1350, 805)], 24),
-        NPC('athlete', '박준혁 (태권도 선수)', 'hall', [(752, 870), (764, 881)], 32),
-        NPC('it_expert', '이도현 (보안 전문가)', 'study', [(350, 790), (359, 817)], 30),
-        NPC('chef', '서유진 (요리사)', 'kitchen', [(1360, 244), (1391, 251)], 30),
-        NPC('photographer', '정수빈 (사진작가)', 'banquet', [(907, 195), (912, 211)], 28),
-        NPC('planner', '한지우 (파티 총무)', 'study', [(348, 718), (359, 743)], 26),
+        NPC('athlete', '박준혁 (태권도 선수)', 'hall', [(752, 870)], 82),
+        NPC('it_expert', '이도현 (보안 전문가)', 'security_room', [(720, 220)], 68),
+        NPC('chef', '서유진 (요리사)', 'kitchen', [(1360, 244)], 66),
+        NPC('photographer', '정수빈 (사진작가)', 'banquet', [(907, 210)], 63),
+        NPC('planner', '한지우 (파티 총무)', 'banquet', [(585, 220)], 72),
     ]
+    npcs[1].set_patrol([('hall', (750, 870), 3), ('foyer', (233, 330), 4)])
+    npcs[2].set_patrol([('security_room', (720, 220), 4), ('security_lobby', (620, 340), 4)])
+    npcs[3].set_patrol([('kitchen', (1360, 250), 4), ('banquet', (994, 270), 3)])
+    _resume_photographer()
+    npcs[5].set_patrol([('banquet', (585, 220), 4), ('study', (350, 820), 5)])
     items = [
         WorldItem('knife', 'kitchen', *ROOMS['kitchen'].point(1260, 372),
                   display_position=ROOMS['kitchen'].point(1260, 313)),
@@ -56,6 +63,7 @@ def init():
         FixedProp('safe', 'vault', *ROOMS['vault'].point(1231, 734), '금고'),
         FixedProp('alarm', 'vault', *ROOMS['vault'].point(1419, 764), '경보 장치'),
         FixedProp('cake', 'banquet', *ROOMS['banquet'].point(910, 300), '케이크'),
+        FixedProp('camera_console', 'security_room', *ROOMS['security_room'].point(575, 190), '카메라 점검 단말'),
     ]
     for obj in npcs + [player]:
         game_world.add_object(obj, 1)
@@ -143,10 +151,12 @@ def _interact_npc(npc):
         _speak(SECURITY)
     elif npc.character == 'photographer':
         stage.photographer_busy = True
+        stage.photographer_remaining = 45.0
+        npc.set_patrol([])
         npc.move_to_room('study', [(156, 739), (158, 758)])
         npc.working = True
         _speak((('주인공', '아까부터 카메라가 이상해 보이는데, 확인해 보는 게 어때?'),
-                ('정수빈 (사진작가)', '초점이 자꾸 어긋나네. 서재에서 장비를 좀 살펴볼게.'),
+                ('정수빈 (사진작가)', '초점이 자꾸 어긋나네. 서재에서 45초 정도 장비를 살펴볼게.'),
                 ('상황', '정수빈은 촬영을 멈추고 서재로 향했다.')))
     elif npc.character == 'planner':
         _say('한지우: 저택 완공을 기념한 날짜는 11월 25일이야. 금고 번호도 그날에 맞췄다고 하더라.')
@@ -186,8 +196,14 @@ def _interact_prop(prop):
             entered_code = ''
             player.keys.clear()
             _say('금고 비밀번호 4자리를 입력하고 Enter를 누르세요. 단서는 저택 안에 있습니다.')
+    elif prop.name == 'camera_console':
+        if stage.can_prepare:
+            surveillance.disable()
+            _say('감시 카메라가 45초 동안 정지합니다. 금고 경보와는 별개입니다.', 8)
+        else:
+            _say('준비가 끝나 카메라 점검 설정을 바꿀 수 없습니다.', 5)
     elif prop.name == 'alarm':
-        _say('전자 보안 장치: 서재의 보안 전문가에게 시스템에 대해 물어보자.')
+        _say('전자 보안 장치: 보안실과 경비 구역을 오가는 전문가에게 물어보자.')
     elif prop.name == 'cake':
         _say('생일 케이크가 준비되어 있다. 손님들이 거실에 모이는 시기를 알 수 있다.')
 
@@ -227,10 +243,15 @@ def interact():
         _interact_prop(target)
 
 
+def _resume_photographer():
+    npcs[4].set_patrol([('banquet', (910, 215), 4), ('banquet', (600, 400), 3),
+                        ('banquet', (910, 400), 4)])
+
+
 def _jewel_acquired():
     if pursuit.start(stage, npcs):
         player.keys.clear()
-        _say('보석을 가져가자 서재에서 다급한 발소리가 들립니다! 현관으로 탈출하세요.', 10)
+        _say('보석을 가져가자 저택 곳곳에서 다급한 발소리가 들립니다! 현관으로 탈출하세요.', 10)
     else:
         _say('보석 획득! 현관을 거쳐 저택 밖으로 나가세요.', 9)
 
@@ -344,7 +365,11 @@ def update():
         investigation.x, investigation.y = x, y
         return
     was_preparing = stage.can_prepare
+    photographer_was_busy = stage.photographer_busy
     stage.update(dt)
+    if photographer_was_busy and not stage.photographer_busy and not pursuit.active:
+        _resume_photographer()
+        _say('사진작가가 장비 점검을 마치고 연회장으로 돌아옵니다.', 6)
     if was_preparing and not stage.can_prepare:
         _say('준비 시간이 끝났습니다. 확보한 도구로 협박하거나 금고 암호를 입력하세요.', 10)
     room_before = stage.current_room
@@ -359,6 +384,12 @@ def update():
             _end(True, '범인은 주인을 위협해 금고를 열게 한 뒤, 보석을 챙겨 뒤쫓는 사람들을 피해 현관으로 빠져나갔을 겁니다. 아마 이런 순서로 범행이 진행되었을 것입니다.' if stage.robbery_triggered else '범인은 사람들의 눈을 피해 금고를 열고, 보석을 챙겨 현관으로 빠져나갔을 겁니다. 아마 이런 순서로 범행이 진행되었을 것입니다.')
         else:
             _end(False, '만약 범인에게 이럴 용기가 있었더라면 좋았을 텐데.', abandoned=True)
+        return
+    camera_notice = surveillance.update(dt, stage, player)
+    if camera_notice:
+        notice_text, notice_timer = camera_notice, 4
+    if stage.suspicion >= 4:
+        _end(False, '감시 기록으로 의심도가 최대치에 도달했습니다.')
         return
     captor = pursuit.update(dt, stage, player)
     if captor is not None:
@@ -384,15 +415,17 @@ def draw():
     if investigation.active:
         investigation.draw_scene(stage.current_room)
     else:
+        surveillance.draw(stage.current_room)
         for obj in sorted(objects + [player], key=lambda actor: actor.y, reverse=True):
             obj.draw()
 
     for door in stage.room.doors:
         x, y = stage.room.point(*door.point)
-        restricted = door.target == 'vault' and stage.vault_restricted
-        label = '금고실 · 출입 제한' if restricted else door.label
+        restricted = door.target in ('vault', 'security_lobby', 'security_room') and stage.vault_restricted
+        label = ROOMS[door.target].label + ' · 출입 제한' if restricted else door.label
         label_color = (255, 169, 151) if restricted else (251, 223, 153)
         width = 39 + 13 * len(label)
+        x = max(22 + width / 2, min(938 - width / 2, x))
         draw_rectangle(int(x - width / 2), int(y - 12), int(x + width / 2),
                        int(y + 13), 31, 24, 23, 245, filled=True)
         text(int(x - 7 * len(label)), int(y + 7), label, 15, label_color)
@@ -405,6 +438,8 @@ def draw():
     phase = '추적 중 · 탈출' if pursuit.active else ('준비 ' + game_settings.clock(stage.preparation_remaining) if stage.can_prepare else '준비 종료')
     text(390, 622, f'{game_settings.LABELS[stage.difficulty]} · {phase}', 19,
          (255, 159, 137) if stage.can_prepare and stage.preparation_remaining <= 30 else (255, 231, 177))
+    if surveillance.disabled_remaining > 0:
+        text(24, 590, f'카메라 정지 {surveillance.disabled_remaining:.0f}초', 15, (153, 215, 188))
     if notice_timer > 0:
         text(280, 590, notice_text, 14, (249, 151, 145))
     draw_rectangle(0, 0, 959, 93, 29, 23, 22, 255, filled=True)

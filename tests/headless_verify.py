@@ -233,6 +233,7 @@ play_mode.stage.current_room = 'vault'
 guard = play_mode.npcs[2]
 # A controlled observer in the restricted room tests the cooldown independently
 # of the expert's production placement in the study.
+guard.set_patrol([])
 guard.move_to_room('vault', [(1174, 760)])
 assert play_mode.stage.can_move(guard.x, guard.y)
 play_mode.player.x, play_mode.player.y = guard.x, guard.y - 40
@@ -420,8 +421,8 @@ print('PASS: greeting, paused dialogue, expert script and coffee refill')
 game_framework.change_mode(play_mode)
 play_mode.dialogue.pages = []
 expert = play_mode.npcs[2]
-assert expert.room == 'study'
-play_mode.stage.current_room = 'study'
+assert expert.room == 'security_room'
+play_mode.stage.current_room = expert.room
 assert all(play_mode.stage.can_move(*point) for point in expert.path)
 for index in (0, 1, 2):
     obj = play_mode.items[index]
@@ -470,7 +471,7 @@ play_mode.dialogue.pages = []
 play_mode.stage.current_room = 'banquet'
 for point in ((770, 220), (770, 427), (585, 298), (992, 298)):
     assert play_mode.stage.can_move(*ROOMS['banquet'].point(*point)), point
-print('PASS: study expert, surface pickup points, six room clues, charge/revisit rules, equipment dialogue and dining lanes')
+print('PASS: distributed expert, surface pickups, all-room clues and equipment dialogue')
 
 assert not any(obj.room == 'foyer' for obj in play_mode.items)
 print('PASS: no loose item bottles in the foyer')
@@ -617,7 +618,7 @@ for character in ('it_expert', 'planner', 'photographer'):
         if caught:
             break
     assert caught is npc, (character, npc.room, visited)
-    assert visited == {'study', 'hall', 'banquet', 'foyer'}, visited
+    assert 'foyer' in visited and len(visited) >= 2, visited
 
 # A route around the banquet table contains collision-free bends.
 room = ROOMS['banquet']
@@ -659,3 +660,134 @@ press(sdl.SDLK_e)
 assert play_mode.player.held_item == 'jewel' and not play_mode.pursuit.active
 assert not any(n.pursuing for n in play_mode.npcs)
 print('PASS: vault owner, jewel-triggered pursuit, pause, collision-safe multi-room chase, capture, endings and quiet code route')
+
+# Expanded room graph has a real kitchen/study loop and reciprocal walkable doors.
+from pursuit import next_door
+assert len(ROOMS) == 9
+assert next_door('kitchen', 'study').target == 'service'
+assert next_door('hall', 'vault').target == 'security_lobby'
+for room_name, room in ROOMS.items():
+    for door in room.doors:
+        if door.target not in ROOMS:
+            continue
+        assert any(d.target == room_name for d in ROOMS[door.target].doors)
+        x, y = room.point(*door.point)
+        approach = x - door.direction[0] * 20, y - door.direction[1] * 20
+        assert walkable(room_name, *approach), (room_name, door.label)
+        assert walkable(door.target, *ROOMS[door.target].point(*door.arrival))
+        # Every usable door is connected to every other exit in that room.
+        for other in room.doors:
+            ox, oy = room.point(*other.point)
+            endpoint = ox - other.direction[0] * 20, oy - other.direction[1] * 20
+            assert path_to(room_name, approach, endpoint), (room_name, door.label, other.label)
+
+# All scheduled NPCs actually reach their rooms, pause, and remain on walkable floor.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+for npc in play_mode.npcs[1:]:
+    visited, paused = {npc.room}, False
+    for _ in range(1800):
+        before = npc.room, npc.x, npc.y
+        npc.update(0.05)
+        visited.add(npc.room)
+        paused |= npc.patrol_wait > 0
+        assert walkable(npc.room, npc.x, npc.y), (npc.character, npc.room, npc.x, npc.y)
+        if before[0] == npc.room:
+            assert clear_segment(npc.room, before[1:], (npc.x, npc.y))
+    assert {stop[0] for stop in npc.patrol} <= visited, (npc.character, visited)
+    assert paused, npc.character
+
+# Camera warning, repeated detection, public access, blindness behind furniture.
+from surveillance import Surveillance, sight_clear, WARNING_SECONDS
+from math import atan2
+s = Stage(current_room='hall')
+actor = Player(s)
+actor.x, actor.y = ROOMS['hall'].point(840, 820)
+actor.held_item = 'knife'
+monitor = Surveillance()
+camera = monitor.cameras[0]
+camera.sweep = 0
+camera.base_angle = atan2(actor.y - camera.y, actor.x - camera.x)
+assert camera.sees(actor)
+monitor.update(0.5, s, actor)
+assert s.suspicion == 0 and camera.exposure == 0.5
+monitor.update(0.5, s, actor)
+assert s.suspicion == 1
+s.update(2.5)
+monitor.update(0.01, s, actor)
+assert s.suspicion == 2
+# Ordinary guests under the corridor camera incur no suspicion.
+actor.held_item = None
+monitor.update(2, s, actor)
+assert s.suspicion == 2 and camera.exposure == 0
+# Brief exposure can be escaped before it produces any penalty.
+actor.held_item = 'knife'
+s.invulnerability_timer = 0
+monitor.update(0.5, s, actor)
+camera.base_angle += 3.14
+monitor.update(0.1, s, actor)
+assert camera.exposure == 0 and s.suspicion == 2
+# The central lobby pillar is both cover and a collision obstacle.
+room = ROOMS['security_lobby']
+assert not sight_clear('security_lobby', room.point(735, 245), room.point(220, 245))
+assert sight_clear('security_lobby', room.point(735, 340), room.point(220, 340))
+# Restricted-area detection does not depend on knife/jewel or alarm bypass.
+s.current_room = 'security_lobby'
+s.security_disabled = True
+actor.held_item = None
+actor.x, actor.y = room.point(620, 160)
+camera = monitor.cameras[1]
+camera.sweep = 0
+camera.base_angle = atan2(actor.y - camera.y, actor.x - camera.x)
+s.invulnerability_timer = 0
+monitor.update(1, s, actor)
+assert s.suspicion == 3
+monitor.disable()
+remaining = monitor.disabled_remaining
+monitor.update(2, s, actor)
+assert s.suspicion == 3 and monitor.disabled_remaining == remaining - 2
+assert all(c.exposure == 0 for c in monitor.cameras)
+
+# Expert only bypasses the alarm; the separate console stops cameras temporarily.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+expert = play_mode.npcs[2]
+play_mode._interact_npc(expert)
+assert play_mode.stage.security_disabled and play_mode.surveillance.disabled_remaining == 0
+play_mode.dialogue.pages = []
+console = next(p for p in play_mode.props if p.name == 'camera_console')
+play_mode.stage.current_room = console.room
+play_mode.player.x, play_mode.player.y = console.x, console.y
+press(sdl.SDLK_e)
+assert play_mode.surveillance.disabled_remaining == 45
+# Notebook/aftermath/dialogue pause camera movement and shutdown timer alike.
+play_mode.investigation.notebook = True
+old_angle = play_mode.surveillance.cameras[0].angle
+play_mode.update()
+assert play_mode.surveillance.disabled_remaining == 45
+assert play_mode.surveillance.cameras[0].angle == old_angle
+play_mode.investigation.notebook = False
+play_mode.stage.finish_preparation()
+play_mode.surveillance.disabled_remaining = 0
+press(sdl.SDLK_e)
+assert play_mode.surveillance.disabled_remaining == 0
+
+# Photographer returns to their normal route after the diversion expires.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+play_mode._interact_npc(play_mode.npcs[4])
+assert play_mode.stage.photographer_busy
+play_mode.dialogue.pages = []
+play_mode.stage.photographer_remaining = 0.1
+game_framework.frame_time = 0.2
+play_mode.update()
+assert not play_mode.stage.photographer_busy
+assert play_mode.npcs[4].patrol and play_mode.npcs[4].patrol[0][0] == 'banquet'
+for name in ROOMS:
+    play_mode.stage.current_room = name
+    play_mode.draw()
+# Restart clears camera alert, shutdown timer and new NPC states.
+game_framework.change_mode(play_mode)
+assert play_mode.surveillance.disabled_remaining == 0
+assert all(c.exposure == 0 for c in play_mode.surveillance.cameras)
+print('PASS: nine-room loop, reciprocal doors, multi-room patrols, camera warning/occlusion/cooldown, independent console, pause and reset')

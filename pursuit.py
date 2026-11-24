@@ -106,7 +106,7 @@ class Pursuit:
             return False
         self.active = True
         self.delay = 1.5
-        self.pursuers = [npc for npc in npcs if npc.room == 'study'
+        self.pursuers = [npc for npc in npcs if npc.character in ('it_expert', 'planner', 'photographer')
                          and npc.visible and not npc.sleeping]
         for npc in self.pursuers:
             npc.pursuing = True

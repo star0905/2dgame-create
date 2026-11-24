@@ -9,6 +9,7 @@ class Stage:
     security_disabled: bool = False
     athlete_unavailable: bool = False
     photographer_busy: bool = False
+    photographer_remaining: float = 0.0
     safe_open: bool = False
     robbery_triggered: bool = False
     jewel_taken: bool = False
@@ -29,6 +30,10 @@ class Stage:
         self.preparation_finished = True
 
     def update(self, dt):
+        if self.photographer_remaining > 0:
+            self.photographer_remaining = max(0.0, self.photographer_remaining - dt)
+            if self.photographer_remaining == 0:
+                self.photographer_busy = False
         if self.can_prepare:
             self.preparation_remaining = max(0.0, self.preparation_remaining - max(0.0, dt))
             if self.preparation_remaining == 0:
@@ -68,7 +73,7 @@ class Stage:
             return ('stolen_jewel_visible', 2)
         if player.held_item == 'knife' and self.current_room != 'kitchen':
             return ('knife_outside_kitchen', 2)
-        if self.current_room == 'vault' and self.vault_restricted:
+        if self.current_room in ('vault', 'security_lobby', 'security_room') and self.vault_restricted:
             return ('restricted_study', 1)
         return None
 

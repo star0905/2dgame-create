@@ -3,10 +3,11 @@
 Geometry uses the source image's coordinates. Room.point converts them to the
 current room's fixed canvas view, including the vertical axis change.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import hypot
 
 from sprite import ASSETS, image_for
+from pico2d import draw_rectangle
 
 SCREEN_W, SCREEN_H = 960, 640
 VIEW_W, VIEW_H = 920, 490
@@ -128,6 +129,32 @@ ROOMS = {
 }
 
 
+# New rooms use local coordinates; the existing source-art rooms keep theirs.
+ROOMS.update({
+    'service': Room('서비스 통로', (0, 0, 800, 420), (20, 90, 780, 400),
+                    ((270, 90, 350, 225, 3), (490, 275, 570, 400, 3)),
+                    (Door('주방', (20, 245), (-1, 0), 27, 'kitchen', (1135, 350)),
+                     Door('서재', (780, 245), (1, 0), 27, 'study', (416, 840)))),
+    'security_lobby': Room('금고실 앞 경비 구역', (0, 0, 800, 420), (20, 90, 780, 400),
+                    ((360, 185, 440, 300, 8),),
+                    (Door('복도', (20, 245), (-1, 0), 27, 'hall', (979, 779)),
+                     Door('금고실', (780, 245), (1, 0), 27, 'vault', (1108, 779)),
+                     Door('보안실', (400, 90), (0, 1), 27, 'security_room', (400, 370)))),
+    'security_room': Room('보안실', (0, 0, 800, 420), (20, 90, 780, 400),
+                    ((125, 90, 315, 155, 0), (475, 90, 675, 155, 0),
+                     (360, 235, 440, 285, 5)),
+                    (Door('경비 구역', (400, 400), (0, -1), 27, 'security_lobby', (400, 120)),)),
+})
+ROOMS['kitchen'] = replace(ROOMS['kitchen'], doors=ROOMS['kitchen'].doors + (
+    Door('서비스 통로', (1106, 350), (-1, 0), 23, 'service', (50, 245)),))
+ROOMS['study'] = replace(ROOMS['study'], doors=ROOMS['study'].doors + (
+    Door('서비스 통로', (444, 840), (1, 0), 23, 'service', (750, 245)),))
+ROOMS['hall'] = replace(ROOMS['hall'], doors=ROOMS['hall'].doors[:-1] + (
+    Door('경비 구역 · 출입 제한', (1008, 779), (1, 0), 25, 'security_lobby', (50, 245)),))
+ROOMS['vault'] = replace(ROOMS['vault'], doors=(
+    Door('경비 구역', (1081, 779), (-1, 0), 23, 'security_lobby', (750, 245)),))
+
+
 # The same transform is used for the banquet art and all its dining furniture.
 DINING_AREA = (560, 220, 980, 424)
 DINING_SCALE = 0.78
@@ -166,10 +193,43 @@ class MansionMap:
     def draw(self):
         name = self.stage.current_room
         room = ROOMS[name]
+        if name in ('service', 'security_lobby', 'security_room'):
+            self.draw_extension(name, room)
+            return
         image = image_for(ASSETS / 'rooms' / f'{name}.png')
         image.draw(SCREEN_W / 2, VIEW_Y, *room.size)
         if name == 'banquet':
             self.draw_dining_area(image, room)
+
+    def draw_extension(self, name, room):
+        # Reuse parquet/stone textures from the supplied mansion, with furniture
+        # footprints shared by rendering, patrol routing and player collision.
+        x0, bottom, x1, top = room.rect((0, 0, 800, 420))
+        draw_rectangle(int(x0), int(bottom), int(x1), int(top), 43, 36, 32, filled=True)
+        image = image_for(ASSETS / 'rooms' / 'banquet.png')
+        for y in range(90, 400, 40):
+            for x in range(20, 780, 40):
+                w, h = min(40, 780 - x), min(40, 400 - y)
+                px, py = room.point(x + w / 2, y + h / 2)
+                image.clip_draw(31, 201, w, h, px, py, w * room.scale + 1, h * room.scale + 1)
+        wall = image_for(ASSETS / 'rooms' / 'vault.png')
+        for x in range(20, 780, 40):
+            px, py = room.point(x + 20, 55)
+            wall.clip_draw(10, 330, 40, 55, px, py, 40 * room.scale + 1, 70 * room.scale)
+        for box in room.furniture:
+            left, low, right, high = room.rect(box[:4])
+            draw_rectangle(int(left), int(low), int(right), int(high), 39, 28, 23, filled=True)
+            draw_rectangle(int(left + 4), int(low + 5), int(right - 4), int(high - 4),
+                           103, 72, 47, filled=True)
+            draw_rectangle(int(left + 8), int(high - 14), int(right - 8), int(high - 10),
+                           171, 135, 83, filled=True)
+        if name == 'security_room':
+            for x in (180, 250, 530, 600):
+                px, py = room.point(x, 118)
+                draw_rectangle(int(px - 25), int(py - 5), int(px + 25), int(py + 27),
+                               21, 40, 43, filled=True)
+                draw_rectangle(int(px - 19), int(py), int(px + 19), int(py + 20),
+                               72, 143, 143, filled=True)
 
     def draw_dining_area(self, image, room):
         left, top, right, bottom = DINING_AREA
