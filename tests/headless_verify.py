@@ -162,6 +162,7 @@ play_mode.init()
 play_mode.dialogue.pages = []
 play_mode.stage.current_room = 'banquet'
 npc = play_mode.npcs[0]
+npc.room = 'banquet'  # Controlled fixture for facing-priority comparison.
 coffee = play_mode.items[2]
 play_mode.player.x, play_mode.player.y = 450, 375
 npc.x, npc.y = 450, 318
@@ -546,3 +547,115 @@ assert play_mode.items[-1].dropped
 press(sdl.SDLK_e)
 assert play_mode.player.held_item == 'knife'
 print('PASS: previously obtained tools can be dropped and recovered after preparation')
+
+# Robbery escape starts on actual jewel pickup, not just safe opening.
+from pursuit import Pursuit, path_to, clear_segment, walkable
+from math import hypot
+
+def ready_robbery():
+    game_framework.change_mode(play_mode)
+    play_mode.dialogue.pages = []
+    owner = play_mode.npcs[0]
+    assert owner.room == 'vault'
+    assert all(walkable('vault', *point) for point in owner.path)
+    play_mode.stage.athlete_unavailable = True
+    play_mode.stage.security_disabled = True
+    photographer = play_mode.npcs[4]
+    play_mode._interact_npc(photographer)
+    play_mode.dialogue.pages = []
+    play_mode.player.pickup('knife')
+    play_mode.stage.current_room = owner.room
+    play_mode.player.x, play_mode.player.y = owner.x, owner.y
+    press(sdl.SDLK_e)
+    assert play_mode.stage.safe_open and not play_mode.pursuit.active
+    safe = play_mode.props[0]
+    play_mode.player.x, play_mode.player.y = safe.x, safe.y
+    press(sdl.SDLK_e)
+    assert play_mode.player.held_item == 'jewel'
+    assert play_mode.pursuit.active
+    assert {n.character for n in play_mode.pursuit.pursuers} == {'it_expert', 'planner', 'photographer'}
+    return play_mode.pursuit
+
+chase = ready_robbery()
+assert chase.delay == 1.5
+positions = [(n.room, n.x, n.y) for n in chase.pursuers]
+# Ordinary NPC updates must not also move pursuers along their old patrol.
+for n in chase.pursuers:
+    n.update(0.5)
+assert positions == [(n.room, n.x, n.y) for n in chase.pursuers]
+play_mode.investigation.notebook = True
+play_mode.update()
+assert chase.delay == 1.5
+play_mode.investigation.notebook = False
+play_mode._speak((('상황', '잠시 정지'),))
+play_mode.update()
+assert chase.delay == 1.5
+play_mode.dialogue.pages = []
+# Dropping the jewel never cancels pursuit or restarts the reaction timer.
+press(sdl.SDLK_q)
+assert chase.active
+press(sdl.SDLK_e)
+assert chase.delay == 1.5
+
+# Each study NPC follows doors all the way to the foyer, never through furniture.
+for character in ('it_expert', 'planner', 'photographer'):
+    chase = ready_robbery()
+    npc = next(n for n in chase.pursuers if n.character == character)
+    chase.pursuers = [npc]
+    play_mode.stage.current_room = 'foyer'
+    actor = play_mode.player
+    actor.x, actor.y = ROOMS['foyer'].point(233, 357)
+    visited = {npc.room}
+    caught = None
+    for _ in range(600):
+        before = npc.room, npc.x, npc.y
+        caught = chase.update(0.05, play_mode.stage, actor)
+        visited.add(npc.room)
+        assert walkable(npc.room, npc.x, npc.y), (character, npc.room, npc.x, npc.y)
+        if before[0] == npc.room:
+            assert clear_segment(npc.room, before[1:], (npc.x, npc.y))
+        if caught:
+            break
+    assert caught is npc, (character, npc.room, visited)
+    assert visited == {'study', 'hall', 'banquet', 'foyer'}, visited
+
+# A route around the banquet table contains collision-free bends.
+room = ROOMS['banquet']
+a, b = room.point(600, 290), room.point(940, 290)
+route = path_to('banquet', a, b)
+assert route and len(route) > 1
+for destination in route:
+    assert clear_segment('banquet', a, destination)
+    a = destination
+
+# Capturing switches to failure; a legitimate exit still produces detective speech.
+chase = ready_robbery()
+chase.delay = 0
+captor = chase.pursuers[0]
+play_mode.stage.current_room = captor.room
+play_mode.player.x, play_mode.player.y = captor.x, captor.y
+play_mode.update()
+assert game_framework.current_mode is result_mode and not result_mode.victory
+assert '붙잡혔습니다' in result_mode.reason
+result_mode.draw()
+chase = ready_robbery()
+play_mode.stage.current_room = 'foyer'
+play_mode.player.x, play_mode.player.y = ROOMS['foyer'].point(233, 440)
+play_mode.stage.exit_attempted = True
+play_mode.update()
+assert result_mode.victory and '진행되었을 것입니다' in result_mode.reason
+result_mode.draw()
+# Retry and the code route keep study actors on their normal schedules.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+assert not play_mode.pursuit.active and not any(n.pursuing for n in play_mode.npcs)
+play_mode.stage.current_room = 'vault'
+play_mode.entered_code = '1125'
+play_mode.input_code_mode = True
+play_mode._handle_safe_input(SimpleNamespace(type=lib.SDL_KEYDOWN, key=sdl.SDLK_RETURN))
+safe = play_mode.props[0]
+play_mode.player.x, play_mode.player.y = safe.x, safe.y
+press(sdl.SDLK_e)
+assert play_mode.player.held_item == 'jewel' and not play_mode.pursuit.active
+assert not any(n.pursuing for n in play_mode.npcs)
+print('PASS: vault owner, jewel-triggered pursuit, pause, collision-safe multi-room chase, capture, endings and quiet code route')

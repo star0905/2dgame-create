@@ -14,6 +14,7 @@ class NPC:
         self.working = True
         self.visible = True
         self.sleeping = False
+        self.pursuing = False
         self.move_to_room(room, path)
 
     def move_to_room(self, room, path):
@@ -23,6 +24,8 @@ class NPC:
         self.path_index = 0
 
     def update(self, dt):
+        if self.pursuing:
+            return  # Pursuit owns movement and animation during the escape.
         if not self.working or not self.path:
             self.sprite.update(dt, False)
             return
@@ -54,5 +57,5 @@ class NPC:
 
     def draw(self):
         self.sprite.draw(self.x, self.y, 52, 74)
-        name = self.display_name + (' · 수면 중 Zzz' if self.sleeping else '')
+        name = self.display_name + (' · 추적 중!' if self.pursuing else (' · 수면 중 Zzz' if self.sleeping else ''))
         text(int(self.x - 52), int(self.y + 86), name, 14, (253, 249, 239))

@@ -1,3 +1,5 @@
+import textwrap
+
 from pico2d import clear_canvas, update_canvas, get_events, draw_rectangle, SDL_QUIT, SDL_KEYDOWN
 from sdl2 import SDLK_ESCAPE, SDLK_r
 from ui import text
@@ -33,17 +35,20 @@ def draw():
     clear_canvas()
     if withdrawal_ending:
         draw_rectangle(0, 0, 959, 639, 0, 0, 0, filled=True)
-        text(157, 339, reason, 28, (241, 238, 232))
+        text(90, 410, '윤시현 (탐정)', 23, (255, 220, 158))
+        for index, line in enumerate(textwrap.wrap(reason, width=35)):
+            text(90, 350 - index * 36, line, 25, (241, 238, 232))
         text(340, 80, '[R] 다시 시도    [Esc] 종료', 18, (165, 162, 158))
         update_canvas()
         return
 
     draw_rectangle(0, 0, 959, 639, 12, 11, 13, 255, filled=True)
-    if victory:
-        text(310, 426, '사건 재현 성공', 36, (130, 230, 168))
-        text(200, 358, reason, 20)
-    else:
-        text(305, 426, '사건 재현 실패', 36, (244, 137, 145))
-        text(180, 358, reason, 20)
-    text(302, 180, '[R] 다시 시도    [Esc] 종료', 23)
+    title = '사건 재현 성공' if victory else '사건 재현 실패'
+    color = (130, 230, 168) if victory else (244, 137, 145)
+    text(310, 480, title, 36, color)
+    text(90, 405, '윤시현 (탐정)', 23, (255, 220, 158))
+    speech = reason if victory else reason + ' 이 재현을 다시 검토해 봐야겠군요.'
+    for index, line in enumerate(textwrap.wrap(speech, width=38)):
+        text(90, 350 - index * 34, line, 22)
+    text(302, 100, '[R] 다시 시도    [Esc] 종료', 23)
     update_canvas()

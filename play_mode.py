@@ -1,6 +1,7 @@
 """Mansion case with a fixed camera for each room."""
 from math import hypot
 from investigation import Investigation, CaseFile
+from pursuit import Pursuit
 from dialogue import (Dialogue, WELCOME, ATHLETE_REQUEST, ATHLETE_DRINK,
                       ATHLETE_SLEEP, ATHLETE_TESTIMONY, SECURITY)
 from pico2d import clear_canvas, update_canvas, get_events, draw_rectangle, SDL_KEYDOWN, SDL_QUIT
@@ -25,8 +26,9 @@ FACING_VECTORS = {'up': (0, 1), 'down': (0, -1), 'left': (-1, 0), 'right': (1, 0
 
 def init():
     global stage, player, npcs, items, props, message, input_code_mode, entered_code, msg_timer
-    global notice_text, notice_timer, investigation, dialogue
+    global notice_text, notice_timer, investigation, dialogue, pursuit
     investigation = Investigation()
+    pursuit = Pursuit()
     dialogue = Dialogue()
     dialogue.start(WELCOME)
     game_world.clear()
@@ -35,7 +37,7 @@ def init():
     game_world.add_object(MansionMap(stage), 0)
     player = Player(stage)
     npcs = [
-        NPC('owner', '김재현 (부자)', 'banquet', [(547, 200), (549, 212)], 24),
+        NPC('owner', '김재현 (부자)', 'vault', [(1330, 805), (1350, 805)], 24),
         NPC('athlete', '박준혁 (태권도 선수)', 'hall', [(752, 870), (764, 881)], 32),
         NPC('it_expert', '이도현 (보안 전문가)', 'study', [(350, 790), (359, 817)], 30),
         NPC('chef', '서유진 (요리사)', 'kitchen', [(1360, 244), (1391, 251)], 30),
@@ -176,7 +178,7 @@ def _interact_prop(prop):
                 _say('금고는 열려 있고 보석은 이미 가져갔습니다.')
             elif player.pickup('jewel'):
                 stage.jewel_taken = True
-                _say('보석 획득! 현관을 거쳐 저택 밖으로 나가세요.', 9)
+                _jewel_acquired()
             else:
                 _say('보석을 들려면 현재 물건을 [Q]로 내려놓으세요.')
         else:
@@ -216,11 +218,21 @@ def interact():
             target.visible = False
             if target.item_name == 'jewel':
                 stage.jewel_taken = True
-            _say(f'{ITEM_LABELS[target.item_name]} 획득. 소지한 물건에 따라 목격 위험이 달라집니다.')
+                _jewel_acquired()
+            else:
+                _say(f'{ITEM_LABELS[target.item_name]} 획득. 소지한 물건에 따라 목격 위험이 달라집니다.')
         else:
             _say('손에는 물건을 하나만 들 수 있습니다. [Q]로 내려놓으세요.')
     else:
         _interact_prop(target)
+
+
+def _jewel_acquired():
+    if pursuit.start(stage, npcs):
+        player.keys.clear()
+        _say('보석을 가져가자 서재에서 다급한 발소리가 들립니다! 현관으로 탈출하세요.', 10)
+    else:
+        _say('보석 획득! 현관을 거쳐 저택 밖으로 나가세요.', 9)
 
 
 def _handle_safe_input(event):
@@ -344,9 +356,13 @@ def update():
     if stage.exit_attempted:
         stage.exit_attempted = False
         if player.held_item == 'jewel':
-            _end(True, '보석을 확보하고 현장에서 탈출했습니다. 범인은 이후 별도의 수사로 체포되었습니다.')
+            _end(True, '범인은 주인을 위협해 금고를 열게 한 뒤, 보석을 챙겨 뒤쫓는 사람들을 피해 현관으로 빠져나갔을 겁니다. 아마 이런 순서로 범행이 진행되었을 것입니다.' if stage.robbery_triggered else '범인은 사람들의 눈을 피해 금고를 열고, 보석을 챙겨 현관으로 빠져나갔을 겁니다. 아마 이런 순서로 범행이 진행되었을 것입니다.')
         else:
             _end(False, '만약 범인에게 이럴 용기가 있었더라면 좋았을 텐데.', abandoned=True)
+        return
+    captor = pursuit.update(dt, stage, player)
+    if captor is not None:
+        _end(False, f'{captor.display_name}에게 붙잡혔습니다. 이 동선이었다면 범인은 현관에 도착하지 못했겠군요. 다른 탈출 방법을 생각해 봐야겠습니다.')
         return
     if not stage.robbery_triggered:
         for npc in npcs:
@@ -386,7 +402,7 @@ def draw():
     text(24, 624, f'{period}  ·  {stage.room.label}', 22, (255, 243, 207))
     text(765, 623, f'의심도  {stage.suspicion} / 4', 19,
          (249, 151, 154) if stage.suspicion >= 3 else (253, 240, 190))
-    phase = '준비 ' + game_settings.clock(stage.preparation_remaining) if stage.can_prepare else '준비 종료'
+    phase = '추적 중 · 탈출' if pursuit.active else ('준비 ' + game_settings.clock(stage.preparation_remaining) if stage.can_prepare else '준비 종료')
     text(390, 622, f'{game_settings.LABELS[stage.difficulty]} · {phase}', 19,
          (255, 159, 137) if stage.can_prepare and stage.preparation_remaining <= 30 else (255, 231, 177))
     if notice_timer > 0:
