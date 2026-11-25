@@ -115,11 +115,10 @@ def _interaction_hint(target):
     if isinstance(target, CaseFile):
         return '[E] 현장 조사 자료 획득'
     if isinstance(target, NPC):
-        action = '협박' if target.character == 'owner' and player.held_item == 'knife' else '대화'
-        return f'[E] {target.display_name} {action}'
+        return f'[E] {target.display_name} 대화'
     if isinstance(target, WorldItem):
         if {player.held_item, target.item_name} == {'coffee', 'sleeping_pills'}:
-            return '[E] 커피와 수면제 조합'
+            return '[E] 상호작용'
         return f'[E] {ITEM_LABELS[target.item_name]} 줍기'
     return f'[E] {target.label} 조사'
 
@@ -203,9 +202,9 @@ def _interact_prop(prop):
         else:
             _say('준비가 끝나 카메라 점검 설정을 바꿀 수 없습니다.', 5)
     elif prop.name == 'alarm':
-        _say('전자 보안 장치: 보안실과 경비 구역을 오가는 전문가에게 물어보자.')
+        _say('경보 장치의 점검용 덮개가 열려 있다.')
     elif prop.name == 'cake':
-        _say('생일 케이크가 준비되어 있다. 손님들이 거실에 모이는 시기를 알 수 있다.')
+        _say('테이블 위에 케이크와 접시들이 준비되어 있다.')
 
 
 def interact():
@@ -229,14 +228,14 @@ def interact():
                 return
             player.held_item = 'sleeping_coffee'
             target.visible = False
-            _say('커피와 수면제를 조합했습니다. 선수에게 가져가 보세요.', 8)
+            _say('커피와 수면제를 조합했습니다.', 8)
         elif player.pickup(target.item_name):
             target.visible = False
             if target.item_name == 'jewel':
                 stage.jewel_taken = True
                 _jewel_acquired()
             else:
-                _say(f'{ITEM_LABELS[target.item_name]} 획득. 소지한 물건에 따라 목격 위험이 달라집니다.')
+                _say(f'{ITEM_LABELS[target.item_name]} 획득.')
         else:
             _say('손에는 물건을 하나만 들 수 있습니다. [Q]로 내려놓으세요.')
     else:
@@ -371,7 +370,7 @@ def update():
         _resume_photographer()
         _say('사진작가가 장비 점검을 마치고 연회장으로 돌아옵니다.', 6)
     if was_preparing and not stage.can_prepare:
-        _say('준비 시간이 끝났습니다. 확보한 도구로 협박하거나 금고 암호를 입력하세요.', 10)
+        _say('준비 시간이 끝났습니다. 이제 남은 상황에서 행동해야 합니다.', 10)
     room_before = stage.current_room
     game_world.update(dt)
     msg_timer = max(0, msg_timer - dt)
