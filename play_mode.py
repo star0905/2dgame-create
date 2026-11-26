@@ -77,6 +77,8 @@ def init():
 
 
 def finish():
+    for npc in npcs:
+        npc.brain.close()
     game_world.clear()
 
 

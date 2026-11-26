@@ -791,3 +791,67 @@ game_framework.change_mode(play_mode)
 assert play_mode.surveillance.disabled_remaining == 0
 assert all(c.exposure == 0 for c in play_mode.surveillance.cameras)
 print('PASS: nine-room loop, reciprocal doors, multi-room patrols, camera warning/occlusion/cooldown, independent console, pause and reset')
+
+# LEC18 BT semantics: reactive priority, interruption and per-NPC blackboards.
+import py_trees
+from py_trees.common import Status
+
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+expert, planner = play_mode.npcs[2], play_mode.npcs[5]
+assert isinstance(expert.bt, py_trees.trees.BehaviourTree)
+assert not expert.bt.root.memory
+assert next(n for n in expert.bt.root.iterate() if n.name == 'Patrol').memory
+assert not next(n for n in expert.bt.root.iterate() if n.name == 'Chase').memory
+# Start a long patrol segment, then interrupt it before reaching its destination.
+expert.set_patrol([('security_lobby', (620, 340), 2), ('security_room', (720, 220), 2)])
+expert.update(0.1)
+index = expert.patrol_index
+assert index == 0
+original_destination = expert.brain.blackboard.target
+planner.update(0.1)
+planner_destination = planner.brain.blackboard.target
+assert expert.brain.namespace != planner.brain.namespace
+assert 'Move To Patrol Location' in expert.brain.snapshot()
+# A normal/code-route run cannot enable Chase even if the player is nearby.
+play_mode.stage.current_room = expert.room
+play_mode.player.x, play_mode.player.y = expert.x, expert.y
+assert not play_mode.pursuit.start(play_mode.stage, play_mode.npcs)
+assert not expert.pursuing
+play_mode.stage.robbery_triggered = True
+assert play_mode.pursuit.start(play_mode.stage, play_mode.npcs)
+play_mode.pursuit.delay = 0
+play_mode.pursuit.pursuers = [expert]
+play_mode.stage.current_room = 'hall'
+play_mode.player.x, play_mode.player.y = ROOMS['hall'].point(840, 820)
+play_mode.pursuit.update(0.05, play_mode.stage, play_mode.player)
+assert next(n for n in expert.bt.root.iterate() if n.name == 'Chase').status == Status.RUNNING
+assert expert.patrol_index == index
+assert planner.brain.blackboard.target == planner_destination
+# A disabled/sleeping actor preempts Chase without moving or catching anyone.
+expert.sleeping = True
+before = expert.room, expert.x, expert.y
+assert play_mode.pursuit.update(0.2, play_mode.stage, play_mode.player) is None
+assert (expert.room, expert.x, expert.y) == before
+assert next(n for n in expert.bt.root.iterate() if n.name == 'Unavailable').status == Status.SUCCESS
+# Chase condition is checked again immediately; patrol resumes the same stop.
+expert.sleeping = False
+expert.pursuing = False
+play_mode.pursuit.active = False
+expert.update(0.05)
+assert expert.patrol_index == index
+assert expert.brain.blackboard.target == original_destination
+assert next(n for n in expert.bt.root.iterate() if n.name == 'Patrol').status == Status.RUNNING
+# Index is advanced only after reaching the intended stop and looking around.
+for _ in range(1200):
+    expert.update(0.05)
+    if expert.patrol_index != index:
+        break
+assert expert.patrol_index == 1
+assert expert.room == 'security_lobby'
+assert hypot(expert.x - original_destination[0], expert.y - original_destination[1]) < 3
+# Reset/mode change unregisters AI targets rather than leaving stale global state.
+namespace = expert.brain.namespace
+play_mode.finish()
+assert not any(key.startswith(namespace + '/') for key in py_trees.blackboard.Blackboard.storage)
+print('PASS: py_trees priorities, memory settings, isolated blackboards, sleep interruption, patrol resume and cleanup')

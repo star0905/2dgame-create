@@ -124,49 +124,7 @@ class Pursuit:
             return None
         for npc in self.pursuers:
             self.crossing_grace[npc] = max(0.0, self.crossing_grace[npc] - dt)
-            door = next_door(npc.room, stage.current_room)
-            if npc.room != stage.current_room and door is None:
-                continue
-            if door:
-                x, y = ROOMS[npc.room].point(*door.point)
-                goal = x - door.direction[0] * 20, y - door.direction[1] * 20
-            else:
-                goal = player.x, player.y
-            self.replan[npc] -= dt
-            if self.replan[npc] <= 0:
-                self.routes[npc] = path_to(npc.room, (npc.x, npc.y), goal)
-                self.replan[npc] = 0.35
-            route = self.routes[npc]
-            budget, moving = 150.0 * max(0.0, dt), False
-            while route and budget > 0:
-                tx, ty = route[0]
-                dx, dy = tx - npc.x, ty - npc.y
-                distance = hypot(dx, dy)
-                if distance < 0.01:
-                    route.pop(0)
-                    continue
-                step = min(distance, budget, 8.0)
-                nx, ny = npc.x + dx / distance * step, npc.y + dy / distance * step
-                if not clear_segment(npc.room, (npc.x, npc.y), (nx, ny)):
-                    self.replan[npc] = 0
-                    break
-                npc.x, npc.y = nx, ny
-                budget -= step
-                moving = True
-                if abs(dx) > abs(dy):
-                    npc.sprite.set_facing('right' if dx > 0 else 'left')
-                else:
-                    npc.sprite.set_facing('up' if dy > 0 else 'down')
-                if step >= distance:
-                    route.pop(0)
-            npc.sprite.update(dt, moving)
-            if door and hypot(npc.x - goal[0], npc.y - goal[1]) < 3:
-                npc.move_to_room(door.target, [door.arrival])
-                self.routes[npc] = []
-                self.replan[npc] = 0
-                self.crossing_grace[npc] = 0.65
-            if (npc.room == stage.current_room and self.crossing_grace[npc] == 0
-                    and hypot(npc.x - player.x, npc.y - player.y) < CATCH_DISTANCE
-                    and clear_segment(npc.room, (npc.x, npc.y), (player.x, player.y))):
-                return npc
+            captor = npc.brain.tick(dt, stage, player, self)
+            if captor is not None:
+                return captor
         return None

@@ -1,3 +1,4 @@
 pico2d
 PySDL2
 Pillow
+py_trees>=2.6,<3
