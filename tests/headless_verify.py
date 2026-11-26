@@ -644,7 +644,7 @@ play_mode.stage.current_room = 'foyer'
 play_mode.player.x, play_mode.player.y = ROOMS['foyer'].point(233, 440)
 play_mode.stage.exit_attempted = True
 play_mode.update()
-assert result_mode.victory and '진행되었을 것입니다' in result_mode.reason
+assert result_mode.victory and '현관으로 빠져나갔을 겁니다.' in result_mode.reason
 result_mode.draw()
 # Retry and the code route keep study actors on their normal schedules.
 game_framework.change_mode(play_mode)

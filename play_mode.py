@@ -2,6 +2,7 @@
 from math import hypot
 from investigation import Investigation, CaseFile
 from pursuit import Pursuit
+from result_mode import SUSPICION_FAILURE
 from surveillance import Surveillance
 from dialogue import (Dialogue, WELCOME, ATHLETE_REQUEST, ATHLETE_DRINK,
                       ATHLETE_SLEEP, ATHLETE_TESTIMONY, SECURITY)
@@ -380,7 +381,7 @@ def update():
     if stage.exit_attempted:
         stage.exit_attempted = False
         if player.held_item == 'jewel':
-            _end(True, '범인은 주인을 위협해 금고를 열게 한 뒤, 보석을 챙겨 뒤쫓는 사람들을 피해 현관으로 빠져나갔을 겁니다. 아마 이런 순서로 범행이 진행되었을 것입니다.' if stage.robbery_triggered else '범인은 사람들의 눈을 피해 금고를 열고, 보석을 챙겨 현관으로 빠져나갔을 겁니다. 아마 이런 순서로 범행이 진행되었을 것입니다.')
+            _end(True, '범인은 주인을 위협해 금고를 열게 한 뒤, 보석을 챙겨 뒤쫓는 사람들을 피해 현관으로 빠져나갔을 겁니다.' if stage.robbery_triggered else '범인은 사람들의 눈을 피해 금고를 열고, 보석을 챙겨 현관으로 빠져나갔을 겁니다.')
         else:
             _end(False, '만약 범인에게 이럴 용기가 있었더라면 좋았을 텐데.', abandoned=True)
         return
@@ -388,7 +389,7 @@ def update():
     if camera_notice:
         notice_text, notice_timer = camera_notice, 4
     if stage.suspicion >= 4:
-        _end(False, '감시 기록으로 의심도가 최대치에 도달했습니다.')
+        _end(False, SUSPICION_FAILURE)
         return
     captor = pursuit.update(dt, stage, player)
     if captor is not None:
@@ -401,7 +402,7 @@ def update():
                 notice_text = notice
                 notice_timer = 4
                 if stage.suspicion >= 4:
-                    _end(False, 'NPC의 목격으로 의심도가 최대치에 도달했습니다.')
+                    _end(False, SUSPICION_FAILURE)
                     return
 
 

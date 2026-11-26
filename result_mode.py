@@ -5,6 +5,8 @@ from sdl2 import SDLK_ESCAPE, SDLK_r
 from ui import text
 import game_framework
 
+SUSPICION_FAILURE = '이 정도로 의심을 쌓았다면 사건이 일어나지 않았을 겁니다.'
+
 victory = False
 withdrawal_ending = False
 reason = ''
@@ -47,7 +49,7 @@ def draw():
     color = (130, 230, 168) if victory else (244, 137, 145)
     text(310, 480, title, 36, color)
     text(90, 405, '윤시현 (탐정)', 23, (255, 220, 158))
-    speech = reason if victory else reason + ' 이 재현을 다시 검토해 봐야겠군요.'
+    speech = reason if victory or reason == SUSPICION_FAILURE else reason + ' 이 재현을 다시 검토해 봐야겠군요.'
     for index, line in enumerate(textwrap.wrap(speech, width=38)):
         text(90, 350 - index * 34, line, 22)
     text(302, 100, '[R] 다시 시도    [Esc] 종료', 23)
