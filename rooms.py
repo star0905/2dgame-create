@@ -133,8 +133,8 @@ ROOMS = {
 ROOMS.update({
     'service': Room('서비스 통로', (0, 0, 800, 420), (20, 90, 780, 400),
                     ((270, 90, 350, 225, 3), (490, 275, 570, 400, 3)),
-                    (Door('주방', (20, 245), (-1, 0), 27, 'kitchen', (1135, 350)),
-                     Door('서재', (780, 245), (1, 0), 27, 'study', (416, 840)))),
+                    (Door('주방', (780, 245), (1, 0), 27, 'kitchen', (1135, 350)),
+                     Door('서재', (20, 245), (-1, 0), 27, 'study', (416, 840)))),
     'security_lobby': Room('금고실 앞 경비 구역', (0, 0, 800, 420), (20, 90, 780, 400),
                     ((360, 185, 440, 300, 8),),
                     (Door('복도', (20, 245), (-1, 0), 27, 'hall', (979, 779)),
@@ -145,10 +145,11 @@ ROOMS.update({
                      (360, 235, 440, 285, 5)),
                     (Door('경비 구역', (400, 400), (0, -1), 27, 'security_lobby', (400, 120)),)),
 })
+# Opposing door faces keep held movement pointing into the destination room.
 ROOMS['kitchen'] = replace(ROOMS['kitchen'], doors=ROOMS['kitchen'].doors + (
-    Door('서비스 통로', (1106, 350), (-1, 0), 23, 'service', (50, 245)),))
+    Door('서비스 통로', (1106, 350), (-1, 0), 23, 'service', (750, 245)),))
 ROOMS['study'] = replace(ROOMS['study'], doors=ROOMS['study'].doors + (
-    Door('서비스 통로', (444, 840), (1, 0), 23, 'service', (750, 245)),))
+    Door('서비스 통로', (444, 840), (1, 0), 23, 'service', (50, 245)),))
 ROOMS['hall'] = replace(ROOMS['hall'], doors=ROOMS['hall'].doors[:-1] + (
     Door('경비 구역 · 출입 제한', (1008, 779), (1, 0), 25, 'security_lobby', (50, 245)),))
 ROOMS['vault'] = replace(ROOMS['vault'], doors=(

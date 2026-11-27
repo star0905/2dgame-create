@@ -1043,3 +1043,27 @@ for digit in '1125':
 press(sdl.SDLK_RETURN)
 assert play_mode.stage.safe_open and not play_mode.input_code_mode
 print('PASS: keypad geometry, SDL mouse coordinates, hover, mixed input, length cap, retry, delete, cancel and paused world')
+
+
+# Service passage portals must not bounce a player back while a direction is held.
+# Test real Player.update movement, not just walkable endpoints or graph links.
+for source, start, key, destination in (
+        ('kitchen', (1135, 350), sdl.SDLK_a, 'service'),
+        ('service', (750, 245), sdl.SDLK_d, 'kitchen'),
+        ('study', (416, 840), sdl.SDLK_d, 'service'),
+        ('service', (50, 245), sdl.SDLK_a, 'study')):
+    portal_stage = Stage(current_room=source)
+    walker = Player(portal_stage)
+    walker.x, walker.y = ROOMS[source].point(*start)
+    walker.keys.add(key)
+    transitions = []
+    previous_room = source
+    for _ in range(12):
+        walker.update(0.05)
+        assert portal_stage.can_move(walker.x, walker.y)
+        if portal_stage.current_room != previous_room:
+            transitions.append(portal_stage.current_room)
+            previous_room = portal_stage.current_room
+    assert transitions == [destination], (source, key, transitions)
+    assert portal_stage.current_room == destination
+print('PASS: held-key kitchen/service/study crossings in both directions without bounce-back')
