@@ -131,10 +131,10 @@ ROOMS = {
 
 # New rooms use local coordinates; the existing source-art rooms keep theirs.
 ROOMS.update({
-    'service': Room('서비스 통로', (0, 0, 800, 420), (20, 90, 780, 400),
-                    ((270, 90, 350, 225, 3), (490, 275, 570, 400, 3)),
-                    (Door('주방', (780, 245), (1, 0), 27, 'kitchen', (1135, 350)),
-                     Door('서재', (20, 245), (-1, 0), 27, 'study', (416, 840)))),
+    'service': Room('사용인 복도', (0, 0, 800, 420), (20, 90, 780, 400),
+                    ((270, 90, 350, 265, 3), (490, 225, 570, 400, 3)),
+                    (Door('주방 작업구역', (780, 245), (1, 0), 27, 'kitchen', (1135, 350)),
+                     Door('서재 보조문', (20, 245), (-1, 0), 27, 'study', (416, 840)))),
     'security_lobby': Room('금고실 앞 경비 구역', (0, 0, 800, 420), (20, 90, 780, 400),
                     ((360, 185, 440, 300, 8),),
                     (Door('복도', (20, 245), (-1, 0), 27, 'hall', (979, 779)),
@@ -147,9 +147,9 @@ ROOMS.update({
 })
 # Opposing door faces keep held movement pointing into the destination room.
 ROOMS['kitchen'] = replace(ROOMS['kitchen'], doors=ROOMS['kitchen'].doors + (
-    Door('서비스 통로', (1106, 350), (-1, 0), 23, 'service', (750, 245)),))
+    Door('사용인 복도', (1106, 350), (-1, 0), 23, 'service', (750, 245)),))
 ROOMS['study'] = replace(ROOMS['study'], doors=ROOMS['study'].doors + (
-    Door('서비스 통로', (444, 840), (1, 0), 23, 'service', (50, 245)),))
+    Door('사용인 복도', (444, 840), (1, 0), 23, 'service', (50, 245)),))
 ROOMS['hall'] = replace(ROOMS['hall'], doors=ROOMS['hall'].doors[:-1] + (
     Door('경비 구역 · 출입 제한', (1008, 779), (1, 0), 25, 'security_lobby', (50, 245)),))
 ROOMS['vault'] = replace(ROOMS['vault'], doors=(
@@ -201,6 +201,23 @@ class MansionMap:
         image.draw(SCREEN_W / 2, VIEW_Y, *room.size)
         if name == 'banquet':
             self.draw_dining_area(image, room)
+        if name in ('kitchen', 'study'):
+            self.draw_work_door(room)
+
+    def draw_work_door(self, room):
+        door = next(d for d in room.doors if d.target == 'service')
+        x, y = room.point(*door.point)
+        # A visible work door makes the blocked boundary legible before discovery.
+        draw_rectangle(int(x - 17), int(y - 12), int(x + 17), int(y + 64),
+                       39, 28, 21, filled=True)
+        draw_rectangle(int(x - 13), int(y - 8), int(x + 13), int(y + 60),
+                       112, 79, 47, filled=True)
+        if self.stage.service_discovered:
+            draw_rectangle(int(x - 9), int(y - 8), int(x + 9), int(y + 55),
+                           21, 25, 23, filled=True)
+        else:
+            draw_rectangle(int(x + 7), int(y + 19), int(x + 10), int(y + 24),
+                           211, 179, 110, filled=True)
 
     def draw_extension(self, name, room):
         # Reuse parquet/stone textures from the supplied mansion, with furniture
@@ -224,6 +241,14 @@ class MansionMap:
                            103, 72, 47, filled=True)
             draw_rectangle(int(left + 8), int(high - 14), int(right - 8), int(high - 10),
                            171, 135, 83, filled=True)
+        if name == 'service':
+            for x, y in ((310, 120), (310, 230), (530, 255), (530, 355)):
+                px, py = room.point(x, y)
+                draw_rectangle(int(px - 32), int(py - 3), int(px + 32), int(py + 3),
+                               182, 149, 99, filled=True)
+                image_for(ASSETS / 'items' / 'coffee.png').draw(px - 15, py + 18, 24, 24)
+                draw_rectangle(int(px + 4), int(py + 10), int(px + 27), int(py + 16),
+                               206, 202, 179, filled=True)
         if name == 'security_room':
             for x in (180, 250, 530, 600):
                 px, py = room.point(x, 118)

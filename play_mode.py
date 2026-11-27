@@ -67,6 +67,8 @@ def init():
         FixedProp('safe', 'vault', *ROOMS['vault'].point(1231, 734), '금고'),
         FixedProp('alarm', 'vault', *ROOMS['vault'].point(1419, 764), '경보 장치'),
         FixedProp('cake', 'banquet', *ROOMS['banquet'].point(910, 300), '케이크'),
+        FixedProp('work_door_kitchen', 'kitchen', *ROOMS['kitchen'].point(1125, 350), '작업용 문'),
+        FixedProp('work_door_study', 'study', *ROOMS['study'].point(424, 840), '보조문'),
         FixedProp('camera_console', 'security_room', *ROOMS['security_room'].point(575, 190), '카메라 점검 단말'),
     ]
     for obj in npcs + [player]:
@@ -189,7 +191,14 @@ def _interact_npc(npc):
 
 def _interact_prop(prop):
     global input_code_mode, entered_code, safe_feedback, hovered_safe_key
-    if prop.name == 'safe':
+    if prop.name in ('work_door_kitchen', 'work_door_study'):
+        if stage.discover_service():
+            _speak((('상황', '문 아래에 식기 운반용 수레가 드나든 흔적이 있다.'),
+                    ('상황', '문을 밀자 저택 뒤편을 돌아가는 사용인 복도가 나타났다.'),
+                    ('상황', '안쪽에는 감시 카메라가 작동하고 있다.')))
+        else:
+            _say('작업문은 열려 있다. 안쪽으로 사용인 복도가 이어진다.')
+    elif prop.name == 'safe':
         if stage.safe_open:
             if stage.jewel_taken:
                 _say('금고는 열려 있고 보석은 이미 가져갔습니다.')
@@ -228,6 +237,8 @@ def interact():
         return
     if isinstance(target, SceneRecord):
         _, label, lines = investigation.collect_record(target.record_id)
+        if target.record_id == 'delivery_memo':
+            stage.discover_service()
         _speak(tuple((label, line) for line in lines) +
                (('상황', '내용을 수첩에 기록했다. [N]으로 다시 볼 수 있다.'),))
     elif isinstance(target, CaseFile):
@@ -468,12 +479,16 @@ def draw():
     else:
         surveillance.draw(stage.current_room)
         for obj in sorted(objects + [player], key=lambda actor: actor.y, reverse=True):
+            if isinstance(obj, FixedProp) and obj.name.startswith('work_door_'):
+                continue  # The background door and its caption already show this prop.
             obj.draw()
 
     for door in stage.room.doors:
         x, y = stage.room.point(*door.point)
         restricted = door.target in ('vault', 'security_lobby', 'security_room') and stage.vault_restricted
         label = ROOMS[door.target].label + ' · 출입 제한' if restricted else door.label
+        if door.target == 'service':
+            label = '사용인 복도' if stage.service_discovered else ('작업용 문' if stage.current_room == 'kitchen' else '보조문')
         label_color = (255, 169, 151) if restricted else (251, 223, 153)
         width = 39 + 13 * len(label)
         x = max(22 + width / 2, min(938 - width / 2, x))

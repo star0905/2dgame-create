@@ -898,7 +898,7 @@ assert not re.search(r'\d', spoken)
 play_mode.dialogue.pages = []
 # Ordinary records and H findings coexist; neither overwrites the other.
 case.notes['foyer'] = ('시험 흔적', ('기록', '유지'))
-assert len(case.notebook_entries()) == 3
+assert len(case.notebook_entries()) == len(case.documents) + 1
 press(ord('n'))
 assert case.notebook
 for page in range(len(case.notebook_entries())):
@@ -919,7 +919,7 @@ while play_mode.dialogue.active:
 play_mode.draw()
 press(sdl.SDLK_ESCAPE)
 press(ord('n'))
-assert case.notebook and len(case.notebook_entries()) == 4
+assert case.notebook and len(case.notebook_entries()) == len(case.documents) + 2
 press(sdl.SDLK_ESCAPE)
 # Derive month and day independently rather than obtain a complete answer from one NPC.
 month_lines = ' '.join(case.records['event_month'][2])
@@ -1052,7 +1052,7 @@ for source, start, key, destination in (
         ('service', (750, 245), sdl.SDLK_d, 'kitchen'),
         ('study', (416, 840), sdl.SDLK_d, 'service'),
         ('service', (50, 245), sdl.SDLK_a, 'study')):
-    portal_stage = Stage(current_room=source)
+    portal_stage = Stage(current_room=source, service_discovered=True)
     walker = Player(portal_stage)
     walker.x, walker.y = ROOMS[source].point(*start)
     walker.keys.add(key)
@@ -1067,3 +1067,112 @@ for source, start, key, destination in (
     assert transitions == [destination], (source, key, transitions)
     assert portal_stage.current_room == destination
 print('PASS: held-key kitchen/service/study crossings in both directions without bounce-back')
+
+# The staff route must be discovered, not entered by silently walking into a wall.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+assert not play_mode.stage.service_discovered
+play_mode.stage.current_room = 'kitchen'
+actor = play_mode.player
+actor.x, actor.y = ROOMS['kitchen'].point(1135, 350)
+actor.keys.add(sdl.SDLK_a)
+for _ in range(12):
+    actor.update(0.05)
+assert play_mode.stage.current_room == 'kitchen'
+actor.keys.clear()
+# Captions reveal a work door, not its destination, until it has been investigated.
+captions = []
+original_text = play_mode.text
+play_mode.text = lambda x, y, value, *args: captions.append(value)
+play_mode.draw()
+assert '작업용 문' in captions and '사용인 복도' not in captions
+play_mode.text = original_text
+# Door investigation itself is a valid discovery clue; no consumable is required.
+actor.x, actor.y = ROOMS['kitchen'].point(1125, 350)
+assert play_mode._nearest_interactable().name == 'work_door_kitchen'
+press(sdl.SDLK_e)
+assert play_mode.stage.service_discovered and play_mode.investigation.charges == 0
+assert play_mode.dialogue.active
+while play_mode.dialogue.active:
+    play_mode.dialogue.advance()
+actor.keys.add(sdl.SDLK_a)
+for _ in range(12):
+    actor.update(0.05)
+assert play_mode.stage.current_room == 'service'
+actor.keys.clear()
+# The delivery memo is outside the passage and independently unlocks knowledge.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+case = play_mode.investigation
+memo = next(d for d in case.documents if d.record_id == 'delivery_memo')
+assert memo.room == 'kitchen'
+play_mode.stage.current_room = memo.room
+play_mode.player.x, play_mode.player.y = memo.x, memo.y
+assert play_mode._nearest_interactable() is memo
+press(sdl.SDLK_e)
+assert play_mode.stage.service_discovered and 'delivery_memo' in case.records
+assert case.charges == 0
+while play_mode.dialogue.active:
+    play_mode.dialogue.advance()
+captions = []
+play_mode.text = lambda x, y, value, *args: captions.append(value)
+play_mode.draw()
+assert '사용인 복도' in captions
+play_mode.text = original_text
+# Shelves prevent a straight run and provide genuine camera occlusion.
+room = ROOMS['service']
+a, b = room.point(750, 245), room.point(50, 245)
+assert not clear_segment('service', a, b)
+route = path_to('service', a, b)
+assert route and len(route) > 1
+for point in route:
+    assert clear_segment('service', a, point)
+    a = point
+monitor = Surveillance()
+camera = next(c for c in monitor.cameras if c.room == 'service')
+s = Stage(current_room='service', service_discovered=True)
+actor = Player(s)
+actor.x, actor.y = room.point(400, 245)
+camera.sweep = 0
+camera.base_angle = atan2(actor.y - camera.y, actor.x - camera.x)
+assert actor.held_item is None and camera.sees(actor)
+monitor.update(1.0, s, actor)
+assert s.suspicion == 1  # The staff-only corridor is monitored even without a tool.
+actor.x, actor.y = room.point(450, 310)
+assert walkable('service', actor.x, actor.y)
+assert not sight_clear('service', (camera.x, camera.y), (actor.x, actor.y))
+monitor.update(0.1, s, actor)
+assert camera.exposure == 0 and s.suspicion == 1
+monitor.disable()
+actor.x, actor.y = room.point(400, 245)
+s.invulnerability_timer = 0
+monitor.update(1.0, s, actor)
+assert s.suspicion == 1 and monitor.disabled_remaining == 44.0
+# NPCs know the staff route and can pursue through it before player discovery.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+expert = play_mode.npcs[2]
+expert.move_to_room('kitchen', [(1135, 350)])
+play_mode.stage.robbery_triggered = True
+play_mode.stage.current_room = 'study'
+actor = play_mode.player
+actor.x, actor.y = ROOMS['study'].point(350, 840)
+assert not play_mode.stage.service_discovered
+chase = play_mode.pursuit
+chase.start(play_mode.stage, play_mode.npcs)
+chase.pursuers = [expert]
+chase.delay = 0
+visited = {expert.room}
+for _ in range(600):
+    caught = chase.update(0.05, play_mode.stage, actor)
+    visited.add(expert.room)
+    assert walkable(expert.room, expert.x, expert.y)
+    if caught:
+        break
+assert caught is expert and {'service', 'study'} <= visited
+assert not play_mode.stage.service_discovered
+# Retry resets discovery while keeping both ways to discover the route available.
+game_framework.change_mode(play_mode)
+assert not play_mode.stage.service_discovered
+assert any(d.record_id == 'delivery_memo' for d in play_mode.investigation.documents)
+print('PASS: staff-door discovery, outside memo, closed boundary, shelf detour, camera cover/shutdown and undiscovered NPC pursuit')

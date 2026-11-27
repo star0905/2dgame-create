@@ -79,6 +79,7 @@ class Surveillance:
         self.cameras = [
             Camera('hall', (920, 745), -pi / 2, 0.8),
             Camera('security_lobby', (735, 125), -2.4, 0.65, 1.0),
+            Camera('service', (620, 170), -2.55, 0.7, 0.0),
         ]
         self.disabled_remaining = 0.0
 
@@ -93,7 +94,7 @@ class Surveillance:
         for camera in self.cameras:
             camera.time += dt
             danger = (player.held_item in ('knife', 'jewel') or
-                      stage.current_room in ('security_lobby', 'security_room', 'vault'))
+                      stage.current_room in ('security_lobby', 'security_room', 'vault', 'service'))
             if (self.disabled_remaining > 0 or camera.room != stage.current_room or
                     not danger or not camera.sees(player)):
                 camera.exposure = 0.0

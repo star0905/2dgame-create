@@ -57,6 +57,10 @@ EVIDENCE_ICONS = {
 # Ordinary records: readable with E, independently of consumable H investigations.
 # Shared event name/mark links the partial dates without exposing a full code.
 PUZZLE_RECORDS = {
+    'delivery_memo': ('kitchen', '배식 동선 메모', (
+        '서재로 보낼 차는 손님들이 모인 연회장을 지나지 않도록 한다.',
+        '주방 뒤쪽 작업문과 서재 보조문을 잇는 사용인 복도를 이용할 것.',
+    )),
     'opening_plaque': ('vault', '금고 명판', (
         '이 집이 처음 손님을 맞은 날을 기억하며.',
         '명판 아래에는 월 / 일 표시가 새겨져 있다.',
@@ -112,6 +116,7 @@ class Investigation:
         self.documents = [
             SceneRecord('event_month', (240, 185), (285, 185)),
             SceneRecord('entry_day', (245, 195), (245, 130)),
+            SceneRecord('delivery_memo', (1340, 380), (1290, 330)),
         ]
         self.records = {}
         self.charges = 0

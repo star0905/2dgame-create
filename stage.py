@@ -21,6 +21,7 @@ class Stage:
     preparation_remaining: float = 180.0
     difficulty: str = 'normal'
     preparation_finished: bool = False
+    service_discovered: bool = False
 
     @property
     def can_prepare(self):
@@ -52,8 +53,15 @@ class Stage:
             return False
         return not self.room.blocks_furniture(x, y, radius)
 
+    def discover_service(self):
+        newly_found = not self.service_discovered
+        self.service_discovered = True
+        return newly_found
+
     def cross_door(self, player, dx, dy):
         for door in self.room.doors:
+            if door.target == 'service' and not self.service_discovered:
+                continue  # A closed work door must be investigated before entry.
             if door.reached(self.room, player.x, player.y, dx, dy):
                 if door.target == 'outside':
                     self.exit_attempted = True
