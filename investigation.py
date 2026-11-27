@@ -28,21 +28,21 @@ EVIDENCE = {
         '선수는 커피를 마신 뒤 갑자기 졸렸다고 증언했다.',
         '평소와 달리 깊이 잠들었다. 커피에 무언가 섞였을 가능성이 있다.',
     )),
-    'service': ('먼지 위의 발자국', (400, 245), (
-        '서비스 통로의 먼지 위로 발자국이 이어져 있다.',
-        '손님들의 눈을 피해 주방과 서재 사이를 오갈 수 있었을 것이다.',
+    'service': ('행사 기록의 흔적', (400, 245), (
+        '남은 행사 기록들은 모두 같은 개관 행사를 가리킨다.',
+        '한 장에서 빠진 날짜 부분을 다른 기록으로 채울 수 있을 것이다.',
     )),
     'security_lobby': ('기둥 뒤의 신발 자국', (400, 340), (
         '기둥 뒤 바닥에 누군가 멈춰 섰던 신발 자국이 남아 있다.',
         '카메라가 돌아가는 동안 이곳에서 기다렸을 가능성이 있다.',
     )),
-    'security_room': ('카메라 정지 기록', (575, 190), (
-        '감시 영상에 45초 동안 점검 화면만 남은 구간이 있다.',
-        '금고 경보 점검과 별개로 카메라 단말을 조작한 흔적이다.',
+    'security_room': ('출입 기록의 여백', (575, 190), (
+        '행사 출입 기록에는 날짜 중 일에 해당하는 부분이 남아 있다.',
+        '행사명과 표식이 같은 문서들을 대조해 봐야겠다.',
     )),
-    'vault': ('보안 점검 기록', (1325, 785), (
-        '범행 무렵 경보가 점검 모드로 전환된 기록이 있다.',
-        '장치가 고장 난 것은 아니다. 누군가 점검 시간을 이용한 듯하다.',
+    'vault': ('금고 명판의 흔적', (1325, 785), (
+        '명판의 첫 손님은 저택의 개관 행사를 뜻하는 듯하다.',
+        '개관한 월 두 자리와 일 두 자리를 차례로 연결해 보자.',
     )),
 }
 
@@ -52,6 +52,40 @@ EVIDENCE_ICONS = {
     'study': 'sleeping_pills', 'hall': 'coffee', 'vault': 'alarm',
     'service': 'magnifier', 'security_lobby': 'magnifier', 'security_room': 'camera',
 }
+
+
+# Ordinary records: readable with E, independently of consumable H investigations.
+# Shared event name/mark links the partial dates without exposing a full code.
+PUZZLE_RECORDS = {
+    'opening_plaque': ('vault', '금고 명판', (
+        '이 집이 처음 손님을 맞은 날을 기억하며.',
+        '명판 아래에는 월 / 일 표시가 새겨져 있다.',
+    )),
+    'event_month': ('service', '개관 행사 준비표', (
+        '저택 개관 행사 · 표식: 월계수',
+        '행사 개최 월: 11월. 일자 항목은 찢겨 나갔다.',
+    )),
+    'entry_day': ('security_room', '최초 행사 출입 기록', (
+        '저택 개관 행사 · 표식: 월계수',
+        '25일, 방문객 출입 개시. 월 항목은 지워져 있다.',
+    )),
+}
+
+
+class SceneRecord:
+    def __init__(self, record_id, point, display_point):
+        self.record_id = record_id
+        self.room, self.label, self.lines = PUZZLE_RECORDS[record_id]
+        self.x, self.y = ROOMS[self.room].point(*point)
+        self.display_x, self.display_y = ROOMS[self.room].point(*display_point)
+        self.visible = True
+
+    def draw(self):
+        x, y = int(self.display_x), int(self.display_y)
+        draw_rectangle(x - 12, y, x + 12, y + 22, 215, 201, 167, filled=True)
+        for offset in (6, 11, 16):
+            draw_rectangle(x - 7, y + offset, x + 7, y + offset, 85, 70, 49)
+        text(x - 7 * len(self.label), y + 40, self.label, 14, (255, 231, 177))
 
 
 class CaseFile:
@@ -75,6 +109,11 @@ class Investigation:
             CaseFile('kitchen', (1396, 373)),
             CaseFile('study', (152, 831)),
         ]
+        self.documents = [
+            SceneRecord('event_month', (240, 185), (285, 185)),
+            SceneRecord('entry_day', (245, 195), (245, 130)),
+        ]
+        self.records = {}
         self.charges = 0
         self.unlocked = set()
         self.notes = {}
@@ -83,6 +122,19 @@ class Investigation:
         self.note_page = 0
         self.detective = SpriteAnimator('detective')
         self.x = self.y = 0.0
+
+    def collect_record(self, record_id):
+        """Reading never consumes a charge, an item slot or the paper itself."""
+        value = PUZZLE_RECORDS[record_id]
+        self.records[record_id] = value
+        return value
+
+    def notebook_entries(self):
+        entries = [('일반 기록', room, label, lines)
+                   for room, label, lines in self.records.values()]
+        entries += [('현장 조사', room, label, lines)
+                    for room, (label, lines) in self.notes.items()]
+        return entries
 
     def open_scene(self, room_name, player):
         if room_name not in EVIDENCE:
@@ -128,11 +180,12 @@ class Investigation:
     def draw_notebook(self):
         draw_rectangle(65, 130, 895, 520, 35, 29, 26, filled=True)
         text(95, 480, '탐정 수첩', 27, (255, 228, 176))
-        entries = list(self.notes.items())
+        entries = self.notebook_entries()
         if entries:
             self.note_page %= len(entries)
-            room, (label, lines) = entries[self.note_page]
-            text(95, 410, f'{ROOMS[room].label} · {label}', 23)
+            category, room, label, lines = entries[self.note_page]
+            text(95, 440, category, 16, (207, 190, 160))
+            text(95, 400, f'{ROOMS[room].label} · {label}', 23)
             for i, line in enumerate(lines):
                 text(95, 350 - i * 40, line, 18)
             text(95, 230, f'{self.note_page + 1} / {len(entries)}   방향키로 넘기기', 17)

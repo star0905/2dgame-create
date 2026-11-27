@@ -855,3 +855,104 @@ namespace = expert.brain.namespace
 play_mode.finish()
 assert not any(key.startswith(namespace + '/') for key in py_trees.blackboard.Blackboard.storage)
 print('PASS: py_trees priorities, memory settings, isolated blackboards, sleep interruption, patrol resume and cleanup')
+
+# The quiet route's date can be inferred from ordinary records, without H charges.
+import re
+from investigation import PUZZLE_RECORDS, SceneRecord
+
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+case = play_mode.investigation
+assert case.charges == 0 and not case.records
+actor = play_mode.player
+actor.pickup('coffee')
+for document in case.documents:
+    play_mode.stage.current_room = document.room
+    actor.x, actor.y = document.x, document.y
+    assert walkable(document.room, document.x, document.y)
+    assert play_mode._nearest_interactable() is document
+    assert '[E]' in play_mode._interaction_hint(document)
+    press(sdl.SDLK_e)
+    assert document.record_id in case.records
+    assert actor.held_item == 'coffee' and case.charges == 0
+    assert document.visible and play_mode.dialogue.active
+    remaining = play_mode.stage.preparation_remaining
+    play_mode.update()
+    assert play_mode.stage.preparation_remaining == remaining
+    play_mode.draw()
+    while play_mode.dialogue.active:
+        play_mode.dialogue.advance()
+    count = len(case.records)
+    press(sdl.SDLK_e)
+    assert len(case.records) == count
+    while play_mode.dialogue.active:
+        play_mode.dialogue.advance()
+# A conversation no longer gives either the full date or its safe-code relation.
+play_mode._interact_npc(play_mode.npcs[5])
+spoken = ' '.join(' '.join(lines) for _, lines in play_mode.dialogue.pages)
+assert '개관' in spoken and '금고' not in spoken
+assert not re.search(r'\d', spoken)
+play_mode.dialogue.pages = []
+# Ordinary records and H findings coexist; neither overwrites the other.
+case.notes['foyer'] = ('시험 흔적', ('기록', '유지'))
+assert len(case.notebook_entries()) == 3
+press(ord('n'))
+assert case.notebook
+for page in range(len(case.notebook_entries())):
+    case.note_page = page
+    play_mode.draw()
+press(sdl.SDLK_ESCAPE)
+assert not case.notebook
+# Safe inspection records the inscription and shows month/day entry, without spending H.
+actor.drop()
+play_mode.stage.current_room = 'vault'
+safe = play_mode.props[0]
+actor.x, actor.y = safe.x, safe.y
+press(sdl.SDLK_e)
+assert play_mode.input_code_mode and 'opening_plaque' in case.records
+assert case.charges == 0
+while play_mode.dialogue.active:
+    play_mode.dialogue.advance()
+play_mode.draw()
+press(sdl.SDLK_ESCAPE)
+press(ord('n'))
+assert case.notebook and len(case.notebook_entries()) == 4
+press(sdl.SDLK_ESCAPE)
+# Derive month and day independently rather than obtain a complete answer from one NPC.
+month_lines = ' '.join(case.records['event_month'][2])
+day_lines = ' '.join(case.records['entry_day'][2])
+assert '저택 개관 행사 · 표식: 월계수' in month_lines and '저택 개관 행사 · 표식: 월계수' in day_lines
+code = re.search(r'(\d+)월', month_lines).group(1).zfill(2) + re.search(r'(\d+)일', day_lines).group(1).zfill(2)
+assert code == play_mode.DEMO_SAFE_CODE
+press(sdl.SDLK_e)
+assert play_mode.input_code_mode and not play_mode.dialogue.active
+for key in [*map(ord, '0000'), sdl.SDLK_RETURN]:
+    press(key)
+assert not play_mode.stage.safe_open
+press(sdl.SDLK_e)
+for key in [*map(ord, code), sdl.SDLK_RETURN]:
+    press(key)
+assert play_mode.stage.safe_open and not play_mode.stage.robbery_triggered
+press(sdl.SDLK_e)
+assert actor.held_item == 'jewel' and not play_mode.pursuit.active
+# Finish the code route and ensure the same ending and reset contracts remain.
+play_mode.stage.current_room = 'foyer'
+actor.x, actor.y = ROOMS['foyer'].point(233, 440)
+play_mode.stage.exit_attempted = True
+play_mode.update()
+assert result_mode.victory
+assert '사람들의 눈을 피해' in result_mode.reason
+# Retry resets ordinary records, H notes and paper visibility together.
+game_framework.change_mode(play_mode)
+assert not play_mode.investigation.records and not play_mode.investigation.notes
+assert all(d.visible for d in play_mode.investigation.documents)
+# Reading papers after preparation expires remains possible and doesn't reopen preparation.
+play_mode.dialogue.pages = []
+play_mode.stage.finish_preparation()
+document = play_mode.investigation.documents[0]
+play_mode.stage.current_room = document.room
+play_mode.player.x, play_mode.player.y = document.x, document.y
+press(sdl.SDLK_e)
+assert document.record_id in play_mode.investigation.records
+assert not play_mode.stage.can_prepare
+print('PASS: separate E records, free/repeatable reading, notebook coexistence, inscription, inferred date, manual safe input, code ending and reset')

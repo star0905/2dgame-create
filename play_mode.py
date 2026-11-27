@@ -1,6 +1,6 @@
 """Mansion case with a fixed camera for each room."""
 from math import hypot
-from investigation import Investigation, CaseFile
+from investigation import Investigation, CaseFile, SceneRecord
 from pursuit import Pursuit
 from result_mode import SUSPICION_FAILURE
 from surveillance import Surveillance
@@ -20,7 +20,7 @@ from item import WorldItem, FixedProp, ITEM_LABELS
 from sprite import ASSETS, image_for
 from ui import text
 
-# Training/demo value only, not a canonically finalized puzzle answer.
+# Opening-event month/day inferred from ordinary records; entered manually.
 DEMO_SAFE_CODE = '1125'
 INTERACT_RANGE = 74
 FACING_VECTORS = {'up': (0, 1), 'down': (0, -1), 'left': (-1, 0), 'right': (1, 0)}
@@ -101,7 +101,7 @@ def _end(won, reason, *, abandoned=False):
 def _nearest_interactable():
     facing_x, facing_y = FACING_VECTORS[player.sprite.facing]
     candidates = []
-    for obj in npcs + items + props + investigation.files:
+    for obj in npcs + items + props + investigation.files + investigation.documents:
         if obj.room != stage.current_room or not obj.visible:
             continue
         dx, dy = obj.x - player.x, obj.y - player.y
@@ -161,7 +161,7 @@ def _interact_npc(npc):
                 ('정수빈 (사진작가)', '초점이 자꾸 어긋나네. 서재에서 45초 정도 장비를 살펴볼게.'),
                 ('상황', '정수빈은 촬영을 멈추고 서재로 향했다.')))
     elif npc.character == 'planner':
-        _say('한지우: 저택 완공을 기념한 날짜는 11월 25일이야. 금고 번호도 그날에 맞췄다고 하더라.')
+        _speak((('한지우 (파티 총무)', '개관 행사 때는 손님이 정말 많았지. 그때 준비하던 기록도 아직 여기저기 남아 있을 거야.'),))
     elif npc.character == 'chef':
         if player.held_item is None:
             player.pickup('coffee')
@@ -197,7 +197,11 @@ def _interact_prop(prop):
             input_code_mode = True
             entered_code = ''
             player.keys.clear()
-            _say('금고 비밀번호 4자리를 입력하고 Enter를 누르세요. 단서는 저택 안에 있습니다.')
+            _say('월 / 일 네 자리를 입력하고 Enter를 누르세요.')
+            if 'opening_plaque' not in investigation.records:
+                _, label, lines = investigation.collect_record('opening_plaque')
+                _speak(tuple((label, line) for line in lines) +
+                       (('상황', '명판의 문구를 수첩에 기록했다.'),))
     elif prop.name == 'camera_console':
         if stage.can_prepare:
             surveillance.disable()
@@ -215,7 +219,11 @@ def interact():
     if target is None:
         _say('대상에게 조금 더 가까이 가세요. 상호작용할 수 있으면 [E]가 표시됩니다.', 2.5)
         return
-    if isinstance(target, CaseFile):
+    if isinstance(target, SceneRecord):
+        _, label, lines = investigation.collect_record(target.record_id)
+        _speak(tuple((label, line) for line in lines) +
+               (('상황', '내용을 수첩에 기록했다. [N]으로 다시 볼 수 있다.'),))
+    elif isinstance(target, CaseFile):
         target.visible = False
         investigation.charges += 1
         _say('현장 조사 자료 1개 획득. 원하는 방에서 [H]로 사용하세요.', 9)
@@ -412,7 +420,7 @@ def draw():
     clear_canvas()
     draw_rectangle(0, 0, 959, 639, 12, 11, 13, 255, filled=True)
     game_world.world[0][0].draw()
-    objects = [obj for obj in npcs + items + props + investigation.files
+    objects = [obj for obj in npcs + items + props + investigation.files + investigation.documents
                if obj.room == stage.current_room and obj.visible]
     if investigation.active:
         investigation.draw_scene(stage.current_room)
@@ -460,8 +468,8 @@ def draw():
     if input_code_mode:
         draw_rectangle(235, 250, 725, 411, 32, 23, 25, 255, filled=True)
         draw_rectangle(235, 250, 725, 411, 180, 135, 82)
-        text(285, 384, '금고 비밀번호', 25, (255, 239, 182))
-        text(285, 342, ' '.join(entered_code.ljust(4, '_')), 27)
+        text(285, 384, '금고 비밀번호  ·  월 / 일', 25, (255, 239, 182))
+        text(285, 342, ' '.join(entered_code.ljust(4, '_')[:2]) + ' / ' + ' '.join(entered_code.ljust(4, '_')[2:]), 27)
         text(285, 290, '숫자 입력     Enter 확인     Esc 취소', 17)
     if dialogue.active:
         dialogue.draw()
