@@ -15,6 +15,7 @@ class TestImage:
         self.src = src
         self.drawn = []
     def clip_draw(self, *args): self.drawn.append(('clip',args))
+    def clip_composite_draw(self, *args): self.drawn.append(('composite',args))
     def draw(self,*args): self.drawn.append(('draw',args))
 class TestFont:
     def draw(self, *args): pass
@@ -1225,3 +1226,44 @@ for name, room in ROOMS.items():
         assert left < px < right and bottom < py < top
     play_mode.draw()
 print('PASS: full-width banquet/kitchen crossings at two frame rates, wall rejection, visible frames and non-overlapping captions')
+
+# Door images stay upright, use correct wall perspective, and preserve the closed staff gate.
+from door_art import door_manifest, sprite_layout, draw_door
+from sprite import ASSETS, image_for
+for name, entry in door_manifest().items():
+    with Image.open(ASSETS / 'doors' / (name + '.png')) as image:
+        assert image.mode == 'RGBA' and list(image.size) == entry['size']
+        assert image.getpixel((0, 0))[3] == 0
+        x, y, w, h = entry['clip']
+        assert 0 <= x < x + w <= image.width and 0 <= y < y + h <= image.height
+for room in ROOMS.values():
+    for door in room.doors:
+        for closed in (False, True):
+            name, clip, (cx, cy, width, height) = sprite_layout(door, room, closed)
+            assert name.startswith('side' if door.direction[0] else 'front')
+            assert name.endswith('_closed' if closed else '_open')
+            draw_door(door, room, closed)
+            call, args = image_for(ASSETS / 'doors' / (name + '.png')).drawn[-1]
+            assert tuple(args[:4]) == tuple(clip)
+            if door.direction[0] < 0:
+                assert call == 'composite' and args[4:6] == (0, 'h')
+            else:
+                assert call == 'clip'
+            px, py = room.point(*door.point)
+            expected_bottom = py - door.span * room.scale if door.direction[0] else py
+            assert abs(cy - height / 2 - expected_bottom) < 0.001
+            assert door.caption_position(room)[1] > cy + height / 2
+game_framework.change_mode(play_mode)
+play_mode.stage.current_room = 'kitchen'
+gate = next(d for d in ROOMS['kitchen'].doors if d.target == 'service')
+closed_image = image_for(ASSETS / 'doors' / 'side_closed.png')
+opened_image = image_for(ASSETS / 'doors' / 'side_open.png')
+before = len(closed_image.drawn)
+play_mode.draw()
+assert len(closed_image.drawn) == before + 1
+play_mode.stage.service_discovered = True
+before = len(closed_image.drawn)
+opened_before = len(opened_image.drawn)
+play_mode.draw()
+assert len(closed_image.drawn) == before and len(opened_image.drawn) > opened_before
+print('PASS: transparent door assets, upright front/side selection, horizontal mirroring, foot anchors and staff-door open/closed rendering')

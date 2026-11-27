@@ -8,6 +8,7 @@ from math import hypot
 
 from sprite import ASSETS, image_for
 from pico2d import draw_rectangle
+from door_art import draw_door, sprite_layout
 
 SCREEN_W, SCREEN_H = 960, 640
 VIEW_W, VIEW_H = 920, 490
@@ -33,10 +34,9 @@ class Door:
         return x - half_span, y - 13, x + half_span, y + 13
 
     def caption_position(self, room):
-        x, y = room.point(*self.point)
-        # Put text above the doorway, leaving the walking opening visible.
-        offset = self.span * room.scale + 22 if self.direction[0] else 35
-        return x, min(555, y + offset)
+        x, _ = room.point(*self.point)
+        _, _, (_, center_y, _, height) = sprite_layout(self, room)
+        return x, min(575, center_y + height / 2 + 14)
 
     def reached(self, room, x, y, dx, dy):
         px, py = room.point(*self.point)
@@ -221,44 +221,7 @@ class MansionMap:
     def draw_doors(self, room):
         for door in room.doors:
             closed = door.target == 'service' and not self.stage.service_discovered
-            left, bottom, right, top = map(int, door.opening_bounds(room))
-            # A wood frame surrounds a dark opening; the floor threshold marks
-            # exactly where the player's feet should cross, rather than its label.
-            draw_rectangle(left - 4, bottom - 4, right + 4, top + 4,
-                           43, 28, 20, filled=True)
-            draw_rectangle(left - 2, bottom - 2, right + 2, top + 2,
-                           165, 125, 72, filled=True)
-            draw_rectangle(left + 2, bottom + 2, right - 2, top - 2,
-                           25, 24, 22, filled=True)
-            if closed:
-                draw_rectangle(left + 3, bottom + 3, right - 3, top - 3,
-                               112, 76, 43, filled=True)
-                draw_rectangle(left + 6, bottom + 9, right - 6, top - 9,
-                               147, 103, 58)
-                cx, cy = int((left + right) / 2), int((bottom + top) / 2)
-                draw_rectangle(cx + 3, cy - 2, cx + 6, cy + 2,
-                               224, 188, 111, filled=True)
-            elif door.direction[0]:
-                cy = int((bottom + top) / 2)
-                draw_rectangle(left + 2, cy - 4, right - 2, cy + 4,
-                               135, 107, 70, filled=True)
-                # The open door leaf is folded against the outer side wall.
-                edge = left - 7 if door.direction[0] < 0 else right + 3
-                draw_rectangle(edge, bottom, edge + 4, top,
-                               117, 78, 42, filled=True)
-                for yy in (bottom + 7, top - 7):
-                    draw_rectangle(left - 3, yy - 2, right + 3, yy + 2,
-                                   201, 163, 102, filled=True)
-            else:
-                cy = int((bottom + top) / 2)
-                draw_rectangle(left + 4, cy - 3, right - 4, cy + 3,
-                               135, 107, 70, filled=True)
-                edge = bottom - 7 if door.direction[1] < 0 else top + 3
-                draw_rectangle(left, edge, right, edge + 4,
-                               117, 78, 42, filled=True)
-                for xx in (left + 7, right - 7):
-                    draw_rectangle(xx - 2, bottom - 3, xx + 2, top + 3,
-                                   201, 163, 102, filled=True)
+            draw_door(door, room, closed)
 
     def draw_extension(self, name, room):
         # Reuse parquet/stone textures from the supplied mansion, with furniture

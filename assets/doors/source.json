@@ -1,0 +1,21 @@
+{
+  "source": "User-supplied mansion atlas image(20261127-161618).png. Front sprites extracted/reconstructed with transparent backgrounds; side views newly generated to match walnut wood, brass hardware and pixel-art shading. No floor, stairs or level transition.",
+  "assets": [
+    {
+      "file": "front_closed.png",
+      "prompt": "Use case: background-extraction. Asset type: game sprite cutout. Edit target: the attached pixel-art mansion tileset. Extract ONLY the ORIGINAL FRONT-FACING CLOSED BROWN WOODEN DOOR: second standalone doorway object from the LEFT in the middle object row, immediately to the right of the open black doorway with wallpaper, around source x=199..260, y=318..410. Keep the original design, four carved rectangular panels, brown frame, brass handle on its right, the exact same pixel-art proportions and palette. Do not redesign the door, do not add extra framing. Remove all surrounding gray background and all other objects. One single complete door sprite on TRUE TRANSPARENT background, centered with modest padding. No floor, no steps, no stairs, no wall, no text. The original pixels/design are the primary invariant. Output a transparent cutout suitable for the same game's front-facing door."
+    },
+    {
+      "file": "front_open.png",
+      "prompt": "Use case: background-extraction. Asset type: transparent front-facing OPEN doorway game sprite. Edit target: the supplied mansion tileset. Extract ONLY the ORIGINAL OPEN WOODEN DOUBLE-LEAF DOOR in the middle object row, around x=667..758,y=313..422, immediately left of the staircase. Use that exact door design and pixel-art style: narrow walnut frame with two slender paneled door leaves opened outward, brass hinges, dark empty opening. Preserve original proportions and muted colors, do not redesign. Isolate the complete frame and both opened leaves on genuine transparent background. Single door only, centred with padding. No gray background, no wall, no stairs, no floor, no signage, no text."
+    },
+    {
+      "file": "side_open.png",
+      "prompt": "Use case: precise-object-edit. Edit target is the isolated wooden open-door sprite. Correct ONLY the VIEW ANGLE to make it a true SIDE-WALL DOOR for a top-down RPG room. Rotate the ENTIRE upright doorway/frame in 3D around its vertical axis by about 65 degrees, so the frame is viewed nearly edge-on from the RIGHT, not front-on. Its lintel and sill are short DIAGONAL edges receding up-left; both long jambs stay vertical. The visible recessed opening must be narrow, a vertical dark parallelogram, not a broad frontal rectangle. Keep warm walnut wood, carved panel leaf, muted brass handle and pixel-art clusters matching the reference mansion. Hinge the door leaf open inward into the room. Full isolated sprite on genuine transparent background. One door only. No wall, no room, no floor patch, no steps or stairs or horizontal rungs, no text. Preserve the door design and colors while changing camera angle. The silhouette is tall and narrow, approximately 0.42 width to 1.0 height."
+    },
+    {
+      "file": "side_closed.png",
+      "prompt": "Use case: precise-object-edit. Edit target: this narrow, oblique SIDE-WALL open wooden door sprite. Make the CLOSED state of precisely the same side-facing door, at precisely the same camera angle and similar framing. Close the hinged wooden leaf fully into its frame so there is NO gap. Preserve the tall narrow side-wall perspective with diagonal lintel, vertical jambs, walnut panels, brass knob, pixel art and shading. Keep it a nearly edge-on three-quarter side-wall view, not frontal. Genuine transparent background, isolated single upright door. No surrounding wall, no floor patch, no text, no stairs, no ladder rungs. Its reflection will be used for the opposite wall."
+    }
+  ]
+}
