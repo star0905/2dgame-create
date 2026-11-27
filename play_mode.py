@@ -484,7 +484,7 @@ def draw():
             obj.draw()
 
     for door in stage.room.doors:
-        x, y = stage.room.point(*door.point)
+        x, y = door.caption_position(stage.room)
         restricted = door.target in ('vault', 'security_lobby', 'security_room') and stage.vault_restricted
         label = ROOMS[door.target].label + ' · 출입 제한' if restricted else door.label
         if door.target == 'service':

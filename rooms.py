@@ -24,6 +24,20 @@ class Door:
     target: str
     arrival: tuple = ()
 
+    def opening_bounds(self, room):
+        """Door art and the lateral trigger use the same source-map half-span."""
+        x, y = room.point(*self.point)
+        half_span = self.span * room.scale
+        if self.direction[0]:
+            return x - 13, y - half_span, x + 13, y + half_span
+        return x - half_span, y - 13, x + half_span, y + 13
+
+    def caption_position(self, room):
+        x, y = room.point(*self.point)
+        # Put text above the doorway, leaving the walking opening visible.
+        offset = self.span * room.scale + 22 if self.direction[0] else 35
+        return x, min(555, y + offset)
+
     def reached(self, room, x, y, dx, dy):
         px, py = room.point(*self.point)
         nx, ny = self.direction
@@ -100,13 +114,13 @@ ROOMS = {
                      (569, 305, 598, 344, 8), (944, 305, 976, 344, 8),
                      (470, 383, 506, 462, 0), (986, 418, 1030, 460, 0)),
                     (Door('현관', (757, 467), (0, -1), 24, 'foyer', (233, 183)),
-                     Door('주방', (469, 296), (-1, 0), 22, 'kitchen', (1457, 309)),
+                     Door('주방', (469, 296), (-1, 0), 36, 'kitchen', (1457, 309)),
                      Door('복도', (1036, 296), (1, 0), 22, 'hall', (538, 780)))),
     'kitchen': Room('주방', (1088, 59, 1512, 485), (1106, 224, 1485, 462),
                     ((1106, 224, 1187, 296, 0), (1221, 308, 1320, 356, 4),
                      (1112, 416, 1158, 457, 0), (1162, 437, 1191, 460, 0),
                      (1195, 435, 1241, 460, 2)),
-                    (Door('연회장', (1485, 310), (1, 0), 20, 'banquet', (493, 296)),)),
+                    (Door('연회장', (1485, 310), (1, 0), 36, 'banquet', (493, 296)),)),
     'study': Room('서재', (30, 549, 463, 965), (47, 674, 444, 924),
                    # The chair and desk have separate footprints so the
                    # exposed rug behind and beside the chair stays walkable.
@@ -196,28 +210,55 @@ class MansionMap:
         room = ROOMS[name]
         if name in ('service', 'security_lobby', 'security_room'):
             self.draw_extension(name, room)
+            self.draw_doors(room)
             return
         image = image_for(ASSETS / 'rooms' / f'{name}.png')
         image.draw(SCREEN_W / 2, VIEW_Y, *room.size)
         if name == 'banquet':
             self.draw_dining_area(image, room)
-        if name in ('kitchen', 'study'):
-            self.draw_work_door(room)
+        self.draw_doors(room)
 
-    def draw_work_door(self, room):
-        door = next(d for d in room.doors if d.target == 'service')
-        x, y = room.point(*door.point)
-        # A visible work door makes the blocked boundary legible before discovery.
-        draw_rectangle(int(x - 17), int(y - 12), int(x + 17), int(y + 64),
-                       39, 28, 21, filled=True)
-        draw_rectangle(int(x - 13), int(y - 8), int(x + 13), int(y + 60),
-                       112, 79, 47, filled=True)
-        if self.stage.service_discovered:
-            draw_rectangle(int(x - 9), int(y - 8), int(x + 9), int(y + 55),
-                           21, 25, 23, filled=True)
-        else:
-            draw_rectangle(int(x + 7), int(y + 19), int(x + 10), int(y + 24),
-                           211, 179, 110, filled=True)
+    def draw_doors(self, room):
+        for door in room.doors:
+            closed = door.target == 'service' and not self.stage.service_discovered
+            left, bottom, right, top = map(int, door.opening_bounds(room))
+            # A wood frame surrounds a dark opening; the floor threshold marks
+            # exactly where the player's feet should cross, rather than its label.
+            draw_rectangle(left - 4, bottom - 4, right + 4, top + 4,
+                           43, 28, 20, filled=True)
+            draw_rectangle(left - 2, bottom - 2, right + 2, top + 2,
+                           165, 125, 72, filled=True)
+            draw_rectangle(left + 2, bottom + 2, right - 2, top - 2,
+                           25, 24, 22, filled=True)
+            if closed:
+                draw_rectangle(left + 3, bottom + 3, right - 3, top - 3,
+                               112, 76, 43, filled=True)
+                draw_rectangle(left + 6, bottom + 9, right - 6, top - 9,
+                               147, 103, 58)
+                cx, cy = int((left + right) / 2), int((bottom + top) / 2)
+                draw_rectangle(cx + 3, cy - 2, cx + 6, cy + 2,
+                               224, 188, 111, filled=True)
+            elif door.direction[0]:
+                cy = int((bottom + top) / 2)
+                draw_rectangle(left + 2, cy - 4, right - 2, cy + 4,
+                               135, 107, 70, filled=True)
+                # The open door leaf is folded against the outer side wall.
+                edge = left - 7 if door.direction[0] < 0 else right + 3
+                draw_rectangle(edge, bottom, edge + 4, top,
+                               117, 78, 42, filled=True)
+                for yy in (bottom + 7, top - 7):
+                    draw_rectangle(left - 3, yy - 2, right + 3, yy + 2,
+                                   201, 163, 102, filled=True)
+            else:
+                cy = int((bottom + top) / 2)
+                draw_rectangle(left + 4, cy - 3, right - 4, cy + 3,
+                               135, 107, 70, filled=True)
+                edge = bottom - 7 if door.direction[1] < 0 else top + 3
+                draw_rectangle(left, edge, right, edge + 4,
+                               117, 78, 42, filled=True)
+                for xx in (left + 7, right - 7):
+                    draw_rectangle(xx - 2, bottom - 3, xx + 2, top + 3,
+                                   201, 163, 102, filled=True)
 
     def draw_extension(self, name, room):
         # Reuse parquet/stone textures from the supplied mansion, with furniture

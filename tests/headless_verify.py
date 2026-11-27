@@ -1176,3 +1176,52 @@ game_framework.change_mode(play_mode)
 assert not play_mode.stage.service_discovered
 assert any(d.record_id == 'delivery_memo' for d in play_mode.investigation.documents)
 print('PASS: staff-door discovery, outside memo, closed boundary, shelf detour, camera cover/shutdown and undiscovered NPC pursuit')
+
+# Use actual held movement across the entire banquet/kitchen doorway, not just its centre.
+for source, destination, key in (('banquet', 'kitchen', sdl.SDLK_a),
+                                  ('kitchen', 'banquet', sdl.SDLK_d)):
+    room = ROOMS[source]
+    door = next(d for d in room.doors if d.target == destination)
+    assert door.span == 36
+    left, bottom, right, top = door.opening_bounds(room)
+    assert abs((top - bottom) / 2 - door.span * room.scale) < 0.001
+    _, caption_y = door.caption_position(room)
+    assert caption_y > top
+    for offset in (-34, -26, -13, 0, 13, 26, 34):
+        for dt in (0.01, 0.05):
+            passage_stage = Stage(current_room=source)
+            walker = Player(passage_stage)
+            x, y = room.point(door.point[0], door.point[1] + offset)
+            walker.x, walker.y = x - door.direction[0] * 44, y
+            assert passage_stage.can_move(walker.x, walker.y)
+            walker.keys.add(key)
+            transitions = []
+            previous_room = source
+            for _ in range(round(0.65 / dt)):
+                walker.update(dt)
+                assert passage_stage.can_move(walker.x, walker.y)
+                if passage_stage.current_room != previous_room:
+                    transitions.append(passage_stage.current_room)
+                    previous_room = passage_stage.current_room
+            assert transitions == [destination], (source, offset, dt, transitions)
+    # A wider trigger must still reject movement into the wall outside its frame.
+    for offset in (-45, 45):
+        passage_stage = Stage(current_room=source)
+        walker = Player(passage_stage)
+        x, y = room.point(door.point[0], door.point[1] + offset)
+        walker.x, walker.y = x - door.direction[0] * 44, y
+        walker.keys.add(key)
+        for _ in range(15):
+            walker.update(0.05)
+        assert passage_stage.current_room == source
+# Every connection has an explicit renderable frame in the same coordinate space.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+for name, room in ROOMS.items():
+    play_mode.stage.current_room = name
+    for door in room.doors:
+        left, bottom, right, top = door.opening_bounds(room)
+        px, py = room.point(*door.point)
+        assert left < px < right and bottom < py < top
+    play_mode.draw()
+print('PASS: full-width banquet/kitchen crossings at two frame rates, wall rejection, visible frames and non-overlapping captions')
