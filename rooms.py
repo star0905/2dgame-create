@@ -8,7 +8,8 @@ from math import hypot
 
 from sprite import ASSETS, image_for
 from pico2d import draw_rectangle
-from door_art import draw_door, sprite_layout
+from door_art import draw_door
+from mansion_art import draw_extension, work_passage
 
 SCREEN_W, SCREEN_H = 960, 640
 VIEW_W, VIEW_H = 920, 490
@@ -26,7 +27,7 @@ class Door:
     arrival: tuple = ()
 
     def opening_bounds(self, room):
-        """Door art and the lateral trigger use the same source-map half-span."""
+        """The lateral trigger span in canvas coordinates."""
         x, y = room.point(*self.point)
         half_span = self.span * room.scale
         if self.direction[0]:
@@ -34,9 +35,10 @@ class Door:
         return x - half_span, y - 13, x + half_span, y + 13
 
     def caption_position(self, room):
-        x, _ = room.point(*self.point)
-        _, _, (_, center_y, _, height) = sprite_layout(self, room)
-        return x, min(575, center_y + height / 2 + 14)
+        x, y = room.point(*self.point)
+        if self.direction[0]:
+            y += self.span * room.scale
+        return x, min(575, y + 24)
 
     def reached(self, room, x, y, dx, dy):
         px, py = room.point(*self.point)
@@ -219,47 +221,17 @@ class MansionMap:
         self.draw_doors(room)
 
     def draw_doors(self, room):
+        # Ordinary connections already have passages in their room paintings.
         for door in room.doors:
-            closed = door.target == 'service' and not self.stage.service_discovered
-            draw_door(door, room, closed)
+            if door.target != 'service':
+                continue
+            if self.stage.service_discovered:
+                work_passage(room, door)
+            else:
+                draw_door(door, room, closed=True)
 
     def draw_extension(self, name, room):
-        # Reuse parquet/stone textures from the supplied mansion, with furniture
-        # footprints shared by rendering, patrol routing and player collision.
-        x0, bottom, x1, top = room.rect((0, 0, 800, 420))
-        draw_rectangle(int(x0), int(bottom), int(x1), int(top), 43, 36, 32, filled=True)
-        image = image_for(ASSETS / 'rooms' / 'banquet.png')
-        for y in range(90, 400, 40):
-            for x in range(20, 780, 40):
-                w, h = min(40, 780 - x), min(40, 400 - y)
-                px, py = room.point(x + w / 2, y + h / 2)
-                image.clip_draw(31, 201, w, h, px, py, w * room.scale + 1, h * room.scale + 1)
-        wall = image_for(ASSETS / 'rooms' / 'vault.png')
-        for x in range(20, 780, 40):
-            px, py = room.point(x + 20, 55)
-            wall.clip_draw(10, 330, 40, 55, px, py, 40 * room.scale + 1, 70 * room.scale)
-        for box in room.furniture:
-            left, low, right, high = room.rect(box[:4])
-            draw_rectangle(int(left), int(low), int(right), int(high), 39, 28, 23, filled=True)
-            draw_rectangle(int(left + 4), int(low + 5), int(right - 4), int(high - 4),
-                           103, 72, 47, filled=True)
-            draw_rectangle(int(left + 8), int(high - 14), int(right - 8), int(high - 10),
-                           171, 135, 83, filled=True)
-        if name == 'service':
-            for x, y in ((310, 120), (310, 230), (530, 255), (530, 355)):
-                px, py = room.point(x, y)
-                draw_rectangle(int(px - 32), int(py - 3), int(px + 32), int(py + 3),
-                               182, 149, 99, filled=True)
-                image_for(ASSETS / 'items' / 'coffee.png').draw(px - 15, py + 18, 24, 24)
-                draw_rectangle(int(px + 4), int(py + 10), int(px + 27), int(py + 16),
-                               206, 202, 179, filled=True)
-        if name == 'security_room':
-            for x in (180, 250, 530, 600):
-                px, py = room.point(x, 118)
-                draw_rectangle(int(px - 25), int(py - 5), int(px + 25), int(py + 27),
-                               21, 40, 43, filled=True)
-                draw_rectangle(int(px - 19), int(py), int(px + 19), int(py + 20),
-                               72, 143, 143, filled=True)
+        draw_extension(room, name)
 
     def draw_dining_area(self, image, room):
         left, top, right, bottom = DINING_AREA

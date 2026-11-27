@@ -1227,43 +1227,33 @@ for name, room in ROOMS.items():
     play_mode.draw()
 print('PASS: full-width banquet/kitchen crossings at two frame rates, wall rejection, visible frames and non-overlapping captions')
 
-# Door images stay upright, use correct wall perspective, and preserve the closed staff gate.
-from door_art import door_manifest, sprite_layout, draw_door
+# Existing painted passages must never receive an open-door overlay.
 from sprite import ASSETS, image_for
-for name, entry in door_manifest().items():
-    with Image.open(ASSETS / 'doors' / (name + '.png')) as image:
-        assert image.mode == 'RGBA' and list(image.size) == entry['size']
-        assert image.getpixel((0, 0))[3] == 0
-        x, y, w, h = entry['clip']
-        assert 0 <= x < x + w <= image.width and 0 <= y < y + h <= image.height
-for room in ROOMS.values():
-    for door in room.doors:
-        for closed in (False, True):
-            name, clip, (cx, cy, width, height) = sprite_layout(door, room, closed)
-            assert name.startswith('side' if door.direction[0] else 'front')
-            assert name.endswith('_closed' if closed else '_open')
-            draw_door(door, room, closed)
-            call, args = image_for(ASSETS / 'doors' / (name + '.png')).drawn[-1]
-            assert tuple(args[:4]) == tuple(clip)
-            if door.direction[0] < 0:
-                assert call == 'composite' and args[4:6] == (0, 'h')
-            else:
-                assert call == 'clip'
-            px, py = room.point(*door.point)
-            expected_bottom = py - door.span * room.scale if door.direction[0] else py
-            assert abs(cy - height / 2 - expected_bottom) < 0.001
-            assert door.caption_position(room)[1] > cy + height / 2
-game_framework.change_mode(play_mode)
-play_mode.stage.current_room = 'kitchen'
-gate = next(d for d in ROOMS['kitchen'].doors if d.target == 'service')
-closed_image = image_for(ASSETS / 'doors' / 'side_closed.png')
-opened_image = image_for(ASSETS / 'doors' / 'side_open.png')
-before = len(closed_image.drawn)
-play_mode.draw()
-assert len(closed_image.drawn) == before + 1
-play_mode.stage.service_discovered = True
-before = len(closed_image.drawn)
-opened_before = len(opened_image.drawn)
-play_mode.draw()
-assert len(closed_image.drawn) == before and len(opened_image.drawn) > opened_before
-print('PASS: transparent door assets, upright front/side selection, horizontal mirroring, foot anchors and staff-door open/closed rendering')
+from mansion_art import SPRITES, furniture_image, draw_extension
+for name in SPRITES:
+    texture = furniture_image(name)
+    with Image.open(texture.src) as image:
+        assert image.mode == 'RGBA'
+        assert image.getchannel('A').getextrema() == (0, 255)
+        assert sum(image.getchannel('A').histogram()[1:]) > image.width * image.height * .25
+for discovered in (False, True):
+    game_framework.change_mode(play_mode)
+    play_mode.stage.service_discovered = discovered
+    textures = [image_for(ASSETS / 'doors' / (name + '.png')) for name in ('front_open', 'side_open')]
+    before = [len(t.drawn) for t in textures]
+    for name in ROOMS:
+        play_mode.stage.current_room = name
+        play_mode.draw()
+    assert [len(t.drawn) for t in textures] == before
+    closed_image = image_for(ASSETS / 'doors' / 'side_closed.png')
+    before = len(closed_image.drawn)
+    play_mode.stage.current_room = 'kitchen'
+    play_mode.draw()
+    assert len(closed_image.drawn) == before + (0 if discovered else 1)
+for name in ('service', 'security_lobby', 'security_room'):
+    textures = [image_for(ASSETS / 'rooms' / (n + '.png')) for n in ('banquet', 'foyer', 'hall')]
+    before = [len(t.drawn) for t in textures]
+    draw_extension(ROOMS[name], name)
+    for texture, count in zip(textures, before):
+        assert all(args[-2] > 0 and args[-1] > 0 for _, args in texture.drawn[count:])
+print('PASS: native passages have no open-door overlays, secret gate state, furniture masks and positive room texture sizes')
