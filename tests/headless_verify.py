@@ -36,6 +36,9 @@ sdl = types.ModuleType('sdl2')
 for i,name in enumerate(['w','a','s','d','UP','DOWN','LEFT','RIGHT',
                          'ESCAPE','RETURN','SPACE','r','e','q','BACKSPACE'], start=11):
     setattr(sdl,'SDLK_'+name,i)
+sdl.SDL_MOUSEBUTTONDOWN = 1001
+sdl.SDL_MOUSEMOTION = 1002
+sdl.SDL_BUTTON_LEFT = 1
 sys.modules['sdl2'] = sdl
 
 from sprite import SpriteAnimator
@@ -956,3 +959,87 @@ press(sdl.SDLK_e)
 assert document.record_id in play_mode.investigation.records
 assert not play_mode.stage.can_prepare
 print('PASS: separate E records, free/repeatable reading, notebook coexistence, inscription, inferred date, manual safe input, code ending and reset')
+
+# Mouse keypad and keyboard share one safe input path; SDL y is top-origin.
+from safe_keypad import BUTTONS, button_at
+from rooms import SCREEN_H
+for action, (left, bottom, right, top) in BUTTONS.items():
+    assert button_at((left + right) / 2, (bottom + top) / 2) == action
+    assert button_at(left, bottom) == action
+    assert button_at(right, top) == action
+assert button_at(10, 10) is None
+
+def open_keypad():
+    play_mode.stage.current_room = 'vault'
+    safe = play_mode.props[0]
+    play_mode.player.x, play_mode.player.y = safe.x, safe.y
+    press(sdl.SDLK_e)
+    while play_mode.dialogue.active:
+        play_mode.dialogue.advance()
+    assert play_mode.input_code_mode
+
+def click_key(action, button=1, event_type=None):
+    left, bottom, right, top = BUTTONS[action]
+    event = SimpleNamespace(type=sdl.SDL_MOUSEBUTTONDOWN if event_type is None else event_type,
+                            button=button, x=int((left + right) / 2),
+                            y=SCREEN_H - 1 - int((bottom + top) / 2))
+    play_mode.get_events = lambda: [event]
+    play_mode.handle_events()
+
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+open_keypad()
+click_key('1', button=3)
+assert play_mode.entered_code == ''
+click_key('1', event_type=sdl.SDL_MOUSEMOTION)
+assert play_mode.hovered_safe_key == '1' and play_mode.entered_code == ''
+click_key('delete')
+click_key('confirm')
+assert play_mode.input_code_mode and not play_mode.stage.safe_open
+assert play_mode.safe_feedback
+click_key('1')
+press(ord('1'))
+click_key('2')
+press(ord('5'))
+click_key('9')
+assert play_mode.entered_code == '1125'
+remaining = play_mode.stage.preparation_remaining
+npc_positions = [(n.room, n.x, n.y) for n in play_mode.npcs]
+play_mode.update()
+assert remaining == play_mode.stage.preparation_remaining
+assert npc_positions == [(n.room, n.x, n.y) for n in play_mode.npcs]
+play_mode.draw()
+click_key('confirm')
+assert play_mode.stage.safe_open and not play_mode.input_code_mode
+assert not play_mode.pursuit.active
+# An incorrect attempt stays open, clears digits and offers another attempt.
+game_framework.change_mode(play_mode)
+play_mode.dialogue.pages = []
+open_keypad()
+for digit in '0000':
+    click_key(digit)
+click_key('confirm')
+assert play_mode.input_code_mode and not play_mode.stage.safe_open
+assert play_mode.entered_code == '' and play_mode.safe_feedback
+play_mode.draw()
+click_key('7')
+assert not play_mode.safe_feedback
+click_key('delete')
+assert play_mode.entered_code == ''
+click_key('8')
+press(sdl.SDLK_BACKSPACE)
+assert play_mode.entered_code == ''
+# Background clicks do not leak to world interaction or close the modal.
+play_mode.get_events = lambda: [SimpleNamespace(type=sdl.SDL_MOUSEBUTTONDOWN, button=1, x=10, y=10)]
+play_mode.handle_events()
+assert play_mode.input_code_mode and play_mode.entered_code == ''
+click_key('2')
+click_key('close')
+assert not play_mode.input_code_mode and play_mode.entered_code == ''
+open_keypad()
+assert play_mode.entered_code == '' and not play_mode.safe_feedback
+for digit in '1125':
+    click_key(digit)
+press(sdl.SDLK_RETURN)
+assert play_mode.stage.safe_open and not play_mode.input_code_mode
+print('PASS: keypad geometry, SDL mouse coordinates, hover, mixed input, length cap, retry, delete, cancel and paused world')

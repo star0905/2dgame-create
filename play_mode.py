@@ -1,5 +1,6 @@
 """Mansion case with a fixed camera for each room."""
 from math import hypot
+from safe_keypad import button_at, draw_keypad
 from investigation import Investigation, CaseFile, SceneRecord
 from pursuit import Pursuit
 from result_mode import SUSPICION_FAILURE
@@ -8,12 +9,13 @@ from dialogue import (Dialogue, WELCOME, ATHLETE_REQUEST, ATHLETE_DRINK,
                       ATHLETE_SLEEP, ATHLETE_TESTIMONY, SECURITY)
 from pico2d import clear_canvas, update_canvas, get_events, draw_rectangle, SDL_KEYDOWN, SDL_QUIT
 from sdl2 import (SDLK_ESCAPE, SDLK_e, SDLK_q, SDLK_SPACE, SDLK_RETURN, SDLK_BACKSPACE,
-                  SDLK_LEFT, SDLK_RIGHT, SDLK_UP, SDLK_DOWN)
+                  SDLK_LEFT, SDLK_RIGHT, SDLK_UP, SDLK_DOWN,
+                  SDL_MOUSEBUTTONDOWN, SDL_MOUSEMOTION, SDL_BUTTON_LEFT)
 import game_world
 import game_framework
 import game_settings
 from stage import Stage
-from rooms import MansionMap, ROOMS
+from rooms import MansionMap, ROOMS, SCREEN_H
 from player import Player, MOVE
 from npc import NPC
 from item import WorldItem, FixedProp, ITEM_LABELS
@@ -29,6 +31,7 @@ FACING_VECTORS = {'up': (0, 1), 'down': (0, -1), 'left': (-1, 0), 'right': (1, 0
 def init():
     global stage, player, npcs, items, props, message, input_code_mode, entered_code, msg_timer
     global notice_text, notice_timer, investigation, dialogue, pursuit, surveillance
+    global safe_feedback, hovered_safe_key
     investigation = Investigation()
     pursuit = Pursuit()
     surveillance = Surveillance()
@@ -74,6 +77,8 @@ def init():
     notice_timer = 0
     input_code_mode = False
     entered_code = ''
+    safe_feedback = ''
+    hovered_safe_key = None
 
 
 def finish():
@@ -183,7 +188,7 @@ def _interact_npc(npc):
 
 
 def _interact_prop(prop):
-    global input_code_mode, entered_code
+    global input_code_mode, entered_code, safe_feedback, hovered_safe_key
     if prop.name == 'safe':
         if stage.safe_open:
             if stage.jewel_taken:
@@ -196,8 +201,10 @@ def _interact_prop(prop):
         else:
             input_code_mode = True
             entered_code = ''
+            safe_feedback = ''
+            hovered_safe_key = None
             player.keys.clear()
-            _say('월 / 일 네 자리를 입력하고 Enter를 누르세요.')
+            _say('월 / 일 네 자리를 클릭하거나 숫자키로 입력하세요.')
             if 'opening_plaque' not in investigation.records:
                 _, label, lines = investigation.collect_record('opening_plaque')
                 _speak(tuple((label, line) for line in lines) +
@@ -266,26 +273,60 @@ def _jewel_acquired():
         _say('보석 획득! 현관을 거쳐 저택 밖으로 나가세요.', 9)
 
 
-def _handle_safe_input(event):
-    global input_code_mode, entered_code
-    if event.type != SDL_KEYDOWN:
+def _apply_safe_action(action):
+    global input_code_mode, entered_code, safe_feedback, hovered_safe_key
+    if action is None:
         return
-    key = event.key
-    if ord('0') <= key <= ord('9') and len(entered_code) < 4:
-        entered_code += chr(key)
-    elif key == SDLK_BACKSPACE:
+    if action in '0123456789' and len(action) == 1:
+        if len(entered_code) < 4:
+            entered_code += action
+            safe_feedback = ''
+    elif action == 'delete':
         entered_code = entered_code[:-1]
-    elif key in (SDLK_RETURN, SDLK_SPACE):
+        safe_feedback = ''
+    elif action == 'confirm':
+        if len(entered_code) < 4:
+            safe_feedback = '네 자리를 모두 입력해 주세요.'
+            return
         if entered_code == DEMO_SAFE_CODE:
             stage.finish_preparation()
             stage.safe_open = True
+            input_code_mode = False
+            entered_code = ''
+            safe_feedback = ''
+            hovered_safe_key = None
+            player.keys.clear()
             _say('비밀번호가 일치합니다. 금고가 열렸습니다. [E]로 보석을 가져가세요.')
         else:
-            _say('비밀번호가 맞지 않습니다. 파티의 단서를 다시 조사해 보세요.')
+            entered_code = ''
+            safe_feedback = '비밀번호가 일치하지 않습니다.'
+    elif action == 'close':
+        input_code_mode = False
         entered_code = ''
-        input_code_mode = False
+        safe_feedback = ''
+        hovered_safe_key = None
+        player.keys.clear()
+
+
+def _handle_safe_input(event):
+    global hovered_safe_key
+    if event.type in (SDL_MOUSEBUTTONDOWN, SDL_MOUSEMOTION):
+        x, y = event.x, SCREEN_H - 1 - event.y
+        hovered_safe_key = button_at(x, y)
+        if event.type == SDL_MOUSEBUTTONDOWN and event.button == SDL_BUTTON_LEFT:
+            _apply_safe_action(hovered_safe_key)
+        return
+    if event.type != SDL_KEYDOWN:
+        return
+    key = event.key
+    if ord('0') <= key <= ord('9'):
+        _apply_safe_action(chr(key))
+    elif key == SDLK_BACKSPACE:
+        _apply_safe_action('delete')
+    elif key in (SDLK_RETURN, SDLK_SPACE):
+        _apply_safe_action('confirm')
     elif key == SDLK_ESCAPE:
-        input_code_mode = False
+        _apply_safe_action('close')
 
 
 def handle_events():
@@ -466,11 +507,7 @@ def draw():
     if investigation.notebook:
         investigation.draw_notebook()
     if input_code_mode:
-        draw_rectangle(235, 250, 725, 411, 32, 23, 25, 255, filled=True)
-        draw_rectangle(235, 250, 725, 411, 180, 135, 82)
-        text(285, 384, '금고 비밀번호  ·  월 / 일', 25, (255, 239, 182))
-        text(285, 342, ' '.join(entered_code.ljust(4, '_')[:2]) + ' / ' + ' '.join(entered_code.ljust(4, '_')[2:]), 27)
-        text(285, 290, '숫자 입력     Enter 확인     Esc 취소', 17)
+        draw_keypad(entered_code, safe_feedback, hovered_safe_key)
     if dialogue.active:
         dialogue.draw()
     update_canvas()
